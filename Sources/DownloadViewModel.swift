@@ -30,6 +30,14 @@ public final class DownloadViewModel: ObservableObject {
     @Published public var autoStartDownload: Bool = false
     @Published public var environmentStatus: EnvironmentStatus = PathFinder.shared.checkEnvironment()
     
+    // MARK: - 外观主题模式 (白天 / 黑夜 / 跟随系统)
+    @Published public var appearanceMode: AppearanceMode = .system {
+        didSet {
+            UserDefaults.standard.set(appearanceMode.rawValue, forKey: kAppearanceModeKey)
+            applyAppearance()
+        }
+    }
+    
     // MARK: - 设置面板
     @Published public var isSettingsPresented: Bool = false
     
@@ -40,6 +48,7 @@ public final class DownloadViewModel: ObservableObject {
     private let kRemoveWatermarkKey = "FlowStream_RemoveWatermark_v2"
     private let kLanguageKey = "FlowStream_Language_v2"
     private let kAutoStartDownloadKey = "FlowStream_AutoStartDownload_v2"
+    private let kAppearanceModeKey = "FlowStream_AppearanceMode_v2"
     private var lastCheckedClipboard: String = ""
     
     public init() {
@@ -75,6 +84,14 @@ public final class DownloadViewModel: ObservableObject {
             self.language = .zh
         }
         
+        // 读取外观偏好 (默认跟随系统)
+        if let savedMode = UserDefaults.standard.string(forKey: kAppearanceModeKey),
+           let mode = AppearanceMode(rawValue: savedMode) {
+            self.appearanceMode = mode
+        } else {
+            self.appearanceMode = .system
+        }
+        
         // 清理旧的无用配置缓存
         UserDefaults.standard.removeObject(forKey: "FlowStream_CloudParserConfig_v2")
         UserDefaults.standard.removeObject(forKey: "FlowStream_CloudPresets_v2")
@@ -84,6 +101,21 @@ public final class DownloadViewModel: ObservableObject {
         
         refreshEnvironment()
         setupAppActiveNotification()
+        applyAppearance()
+    }
+    
+    // MARK: - 外观主题切换应用
+    public func applyAppearance() {
+        DispatchQueue.main.async {
+            switch self.appearanceMode {
+            case .system:
+                NSApp.appearance = nil
+            case .light:
+                NSApp.appearance = NSAppearance(named: .aqua)
+            case .dark:
+                NSApp.appearance = NSAppearance(named: .darkAqua)
+            }
+        }
     }
     
     // MARK: - 语言切换

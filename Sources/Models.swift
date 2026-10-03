@@ -51,6 +51,42 @@ public enum VideoPlatform: String, Codable {
     }
 }
 
+/// 外观显示模式 (白天 / 黑夜 / 跟随系统)
+public enum AppearanceMode: String, CaseIterable, Identifiable, Codable {
+    case system = "跟随系统"
+    case light = "白天"
+    case dark = "黑夜"
+    
+    public var id: String { rawValue }
+    
+    public func displayName(lang: AppLanguage) -> String {
+        switch self {
+        case .system:
+            return lang == .zh ? "系统" : "System"
+        case .light:
+            return lang == .zh ? "白天" : "Light"
+        case .dark:
+            return lang == .zh ? "黑夜" : "Dark"
+        }
+    }
+    
+    public var icon: String {
+        switch self {
+        case .system: return "circle.righthalf.filled"
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.fill"
+        }
+    }
+    
+    public var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
 /// 视频画质与格式选项
 public enum DownloadQuality: String, CaseIterable, Identifiable, Codable {
     case best = "最高画质"

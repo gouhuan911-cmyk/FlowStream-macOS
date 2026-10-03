@@ -18,9 +18,25 @@
 
 ---
 
+<div align="center">
+  <img src="assets/screenshot_dark.png" width="850" alt="FlowStream DL Screenshot Dark Mode" />
+  <p><em>沉浸式深色毛玻璃界面 (Dark Mode)</em></p>
+</div>
+
+<details>
+  <summary><b>☀️ 点击展开查看：清新白天浅色界面 (Light Mode)</b></summary>
+  <br>
+  <div align="center">
+    <img src="assets/screenshot.png" width="850" alt="FlowStream DL Screenshot Light Mode" />
+  </div>
+</details>
+
+---
+
 ## ✨ 核心特性 (Features)
 
-- 🎨 **macOS 现代设计语言**：纯原生 SwiftUI 构建，深度适配 macOS Sonoma / Sequoia 毛玻璃材质、动态微交互与深色模式。
+- 🌓 **白天 / 黑夜 / 系统三项外观自由切换**：支持「白天 (Light)」、「黑夜 (Dark)」与「跟随系统 (System)」三种模式，顶栏与偏好设置面板均可即时无缝热切换。
+- 🎨 **macOS 现代设计语言**：纯原生 SwiftUI 构建，深度适配 macOS Sonoma / Sequoia 毛玻璃材质、动态微交互与系统主题。
 - ⚡️ **B 站独家 0.15 秒极速直通车**：内置 Bilibili 官方开放直通协议，毫秒级提取 1080P/4K 高清流，免除繁重的外部 JS 解密。
 - 🌐 **全网万能流式下载**：无缝调度 `yt-dlp` + `FFmpeg` 强劲内核，完美支持 YouTube、Twitter/X、TikTok、快手及通用流媒体网页。
 - 💧 **无水印纯净提取**：内置 WebKit 原生穿透引擎，自动解析抖音、小红书真实分享笔记与无水印原片直链。
@@ -70,6 +86,7 @@ open FlowStreamDL.app
 
 ```text
 FlowStreamDL/
+├── assets/                   # 原生界面预览截图与视觉素材
 ├── AppIcon_1024.png          # 高清应用 Logo
 ├── AppIcon.icns              # macOS 原生图标包
 ├── Assets.xcassets/          # 图标资源集

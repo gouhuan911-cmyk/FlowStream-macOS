@@ -104,6 +104,14 @@ public struct L10n {
             return lang == .zh ? "完成" : "Done"
         case .close:
             return lang == .zh ? "关闭" : "Close"
+        case .appearance:
+            return lang == .zh ? "外观模式" : "Appearance"
+        case .appearanceSystem:
+            return lang == .zh ? "跟随系统" : "System"
+        case .appearanceLight:
+            return lang == .zh ? "白天" : "Light"
+        case .appearanceDark:
+            return lang == .zh ? "黑夜" : "Dark"
         }
     }
     
@@ -117,6 +125,7 @@ public struct L10n {
         case waiting, parsing, readyStatus, queued, downloading, merging, completed, failed, fileMissing
         case envOk, envMissing
         case settings, done, close
+        case appearance, appearanceSystem, appearanceLight, appearanceDark
     }
 }
 

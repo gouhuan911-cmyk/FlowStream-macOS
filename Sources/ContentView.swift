@@ -47,6 +47,7 @@ public struct ContentView: View {
             }
         }
         .frame(minWidth: 780, idealWidth: 840, maxWidth: 1000, minHeight: 580, idealHeight: 640)
+        .preferredColorScheme(viewModel.appearanceMode.colorScheme)
         // 绑定全窗口拖拽监听
         .onDrop(of: ["public.url", "public.plain-text", "public.utf8-plain-text"], isTargeted: $viewModel.isDraggingOver) { providers in
             viewModel.handleDrop(providers: providers)
@@ -115,6 +116,37 @@ public struct ContentView: View {
             .frame(width: 280)
             
             Spacer()
+            
+            // 外观主题切换 (白天 / 黑夜 / 系统)
+            Menu {
+                ForEach(AppearanceMode.allCases) { mode in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            viewModel.appearanceMode = mode
+                        }
+                    } label: {
+                        HStack {
+                            Text(mode.displayName(lang: viewModel.language))
+                            Spacer()
+                            Image(systemName: mode.icon)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: viewModel.appearanceMode.icon)
+                        .font(.system(size: 11))
+                    Text(viewModel.appearanceMode.displayName(lang: viewModel.language))
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .foregroundColor(.primary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(.quaternary))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help(L10n.text(.appearance, lang: viewModel.language))
             
             // 偏好设置入口按钮
             Button {
@@ -223,7 +255,7 @@ public struct ContentView: View {
                             .stroke(
                                 viewModel.isClipboardAutoFilled
                                     ? Color.cyan.opacity(0.55)
-                                    : Color.white.opacity(colorScheme == .dark ? 0.15 : 0.4),
+                                    : (colorScheme == .dark ? Color.white.opacity(0.15) : Color.black.opacity(0.08)),
                                 lineWidth: 1
                             )
                     )
@@ -767,7 +799,7 @@ public struct ContentView: View {
                 .fill(.regularMaterial.opacity(0.85))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color.white.opacity(colorScheme == .dark ? 0.12 : 0.35), lineWidth: 1)
+                        .stroke(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08), lineWidth: 1)
                 )
         )
     }
@@ -865,7 +897,7 @@ public struct ContentView: View {
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(.regularMaterial.opacity(0.7))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.08), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.08), lineWidth: 1))
         )
     }
     
@@ -1060,6 +1092,26 @@ struct SettingsSheetView: View {
     // MARK: - 下载与存储偏好设置
     private var generalSettingsSection: some View {
         VStack(alignment: .leading, spacing: 18) {
+            // 外观与主题
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L10n.text(.appearance, lang: viewModel.language))
+                    .font(.system(size: 12, weight: .bold))
+                
+                Picker("", selection: $viewModel.appearanceMode) {
+                    ForEach(AppearanceMode.allCases) { mode in
+                        HStack(spacing: 4) {
+                            Image(systemName: mode.icon)
+                            Text(mode.displayName(lang: viewModel.language))
+                        }
+                        .tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 280)
+            }
+            
+            Divider()
+            
             // 保存路径
             VStack(alignment: .leading, spacing: 8) {
                 Text(L10n.text(.saveLocation, lang: viewModel.language))
