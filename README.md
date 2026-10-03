@@ -54,8 +54,8 @@
 ### 方式 2：从源码一键构建
 ```bash
 # 1. 克隆代码仓库
-git clone https://github.com/your-username/FlowStreamDL.git
-cd FlowStreamDL
+git clone https://github.com/gouhuan911-cmyk/FlowStream-macOS.git
+cd FlowStream-macOS
 
 # 2. 执行一键构建脚本 (自动编译并生成 FlowStreamDL.app)
 ./build.sh
