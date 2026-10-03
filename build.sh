@@ -26,9 +26,12 @@ rm -rf "${APP_BUNDLE}" "${OUTPUT_DIR}"
 mkdir -p "${APP_BUNDLE}/Contents/MacOS"
 mkdir -p "${APP_BUNDLE}/Contents/Resources"
 
-# 3. 复制应用图标
+# 3. 复制应用图标与内置解密引擎资源
 if [ -f "AppIcon.icns" ]; then
     cp "AppIcon.icns" "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
+fi
+if [ -d "Sources/Resources" ]; then
+    cp -r Sources/Resources/* "${APP_BUNDLE}/Contents/Resources/"
 fi
 
 # 4. 生成 Info.plist
@@ -52,9 +55,9 @@ cat << 'EOF' > "${APP_BUNDLE}/Contents/Info.plist"
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.0.0</string>
+    <string>2.1.0</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>NSHighResolutionCapable</key>

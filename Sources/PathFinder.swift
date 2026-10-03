@@ -51,6 +51,26 @@ public final class PathFinder {
         return searchInSystemPath(binaryName: "ffmpeg")
     }
     
+    /// 寻找 ffprobe 可执行路径
+    /// 优先级：Apple Silicon (/opt/homebrew/bin) -> Intel (/usr/local/bin) -> 常见用户路径与 PATH
+    public func resolveFFprobePath() -> String? {
+        let candidatePaths = [
+            "/opt/homebrew/bin/ffprobe",
+            "/usr/local/bin/ffprobe",
+            "/usr/bin/ffprobe",
+            "/bin/ffprobe",
+            NSHomeDirectory() + "/.local/bin/ffprobe"
+        ]
+        
+        for path in candidatePaths {
+            if isExecutable(atPath: path) {
+                return path
+            }
+        }
+        
+        return searchInSystemPath(binaryName: "ffprobe")
+    }
+    
     /// 检查指定路径是否存在且具备可执行权限
     public func isExecutable(atPath path: String) -> Bool {
         let fileManager = FileManager.default

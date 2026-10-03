@@ -2,9 +2,12 @@ import Foundation
 import SwiftUI
 import AppKit
 
-public enum MainTab: String, CaseIterable {
-    case queue
-    case history
+public enum MainTab: String, CaseIterable, Identifiable {
+    case queue = "queue"       // 📥 网络下载
+    case convert = "convert"   // 🔄 万能转换
+    case history = "history"   // 📜 媒体历史
+    
+    public var id: String { rawValue }
 }
 
 @MainActor
@@ -13,9 +16,28 @@ public final class DownloadViewModel: ObservableObject {
     @Published public var currentTab: MainTab = .queue
     @Published public var language: AppLanguage = .zh
     
-    // MARK: - 队列任务与历史记录
+    // MARK: - 下载队列与历史记录
     @Published public var queueTasks: [DownloadTaskItem] = []
     @Published public var historyItems: [DownloadHistoryItem] = []
+    
+    // MARK: - 万能转换舱
+    @Published var convertJobs: [TranscodeJob] = []
+    @Published public var isConverting: Bool = false
+    @Published var activePreset: Preset
+    @Published public var useHardwareAcceleration: Bool = true {
+        didSet {
+            UserDefaults.standard.set(useHardwareAcceleration, forKey: kUseHardwareKey)
+            // 重新规划就绪中的转换任务
+            for job in convertJobs where job.state == .ready || job.state == .pending {
+                buildConvertPlan(for: job)
+            }
+        }
+    }
+    @Published public var convertOutputFolderURL: URL
+    @Published public var maxConcurrentTranscodes: Int = 1
+    @Published var ffmpegReport: FFmpegCapabilities.Report = FFmpegCapabilities.query()
+    
+    private var convertRunners: [UUID: TranscodeRunner] = [:]
     
     // MARK: - 输入框与剪贴板感知
     @Published public var urlInput: String = ""
@@ -45,6 +67,9 @@ public final class DownloadViewModel: ObservableObject {
     private let maxConcurrentDownloads = 1
     
     private let kDownloadFolderKey = "FlowStream_DownloadFolderPath_v2"
+    private let kConvertFolderKey = "FlowStream_ConvertFolderPath_v2"
+    private let kUseHardwareKey = "FlowStream_UseHardwareAcceleration_v2"
+    private let kActivePresetIdKey = "FlowStream_ActivePresetId_v2"
     private let kRemoveWatermarkKey = "FlowStream_RemoveWatermark_v2"
     private let kLanguageKey = "FlowStream_Language_v2"
     private let kAutoStartDownloadKey = "FlowStream_AutoStartDownload_v2"
@@ -52,14 +77,39 @@ public final class DownloadViewModel: ObservableObject {
     private var lastCheckedClipboard: String = ""
     
     public init() {
-        // 读取持久化路径
+        // 读取持久化下载路径
+        let defaultDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory() + "/Downloads")
+        let downloadFolder: URL
         if let savedPath = UserDefaults.standard.string(forKey: kDownloadFolderKey),
            FileManager.default.fileExists(atPath: savedPath) {
-            self.downloadFolderURL = URL(fileURLWithPath: savedPath)
+            downloadFolder = URL(fileURLWithPath: savedPath)
         } else {
-            let defaultDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-                ?? URL(fileURLWithPath: NSHomeDirectory() + "/Downloads")
-            self.downloadFolderURL = defaultDir
+            downloadFolder = defaultDir
+        }
+        self.downloadFolderURL = downloadFolder
+        
+        // 读取转换输出路径
+        if let savedConvertPath = UserDefaults.standard.string(forKey: kConvertFolderKey),
+           FileManager.default.fileExists(atPath: savedConvertPath) {
+            self.convertOutputFolderURL = URL(fileURLWithPath: savedConvertPath)
+        } else {
+            self.convertOutputFolderURL = downloadFolder
+        }
+        
+        // 读取硬件加速偏好 (默认开启 Apple Silicon VideoToolbox)
+        if UserDefaults.standard.object(forKey: kUseHardwareKey) != nil {
+            self.useHardwareAcceleration = UserDefaults.standard.bool(forKey: kUseHardwareKey)
+        } else {
+            self.useHardwareAcceleration = true
+        }
+        
+        // 读取激活预设 (默认 MP4 H.264 硬件加速)
+        if let savedPresetId = UserDefaults.standard.string(forKey: kActivePresetIdKey),
+           let p = PresetLibrary.preset(id: savedPresetId) {
+            self.activePreset = p
+        } else {
+            self.activePreset = PresetLibrary.preset(id: "mp4-h264-hw") ?? PresetLibrary.all[0]
         }
         
         // 读取无水印开关
@@ -69,7 +119,7 @@ public final class DownloadViewModel: ObservableObject {
             self.removeWatermark = true
         }
         
-        // 读取自动开始下载开关 (默认关闭，遵循用户控制原则)
+        // 读取自动开始下载开关
         if UserDefaults.standard.object(forKey: kAutoStartDownloadKey) != nil {
             self.autoStartDownload = UserDefaults.standard.bool(forKey: kAutoStartDownloadKey)
         } else {
@@ -92,16 +142,38 @@ public final class DownloadViewModel: ObservableObject {
             self.appearanceMode = .system
         }
         
-        // 清理旧的无用配置缓存
-        UserDefaults.standard.removeObject(forKey: "FlowStream_CloudParserConfig_v2")
-        UserDefaults.standard.removeObject(forKey: "FlowStream_CloudPresets_v2")
-        
         // 加载历史记录
         self.historyItems = HistoryManager.shared.loadHistory()
         
         refreshEnvironment()
         setupAppActiveNotification()
         applyAppearance()
+    }
+    
+    // MARK: - 常用预设列表与切换
+    var quickPresets: [Preset] {
+        [
+            PresetLibrary.preset(id: "mp4-h264-hw") ?? PresetLibrary.all[0],
+            PresetLibrary.preset(id: "mp4-hevc-hw") ?? PresetLibrary.all[1],
+            PresetLibrary.preset(id: "mov-prores") ?? PresetLibrary.all[2],
+            PresetLibrary.preset(id: "gif") ?? PresetLibrary.all[3],
+            PresetLibrary.preset(id: "audio-mp3") ?? PresetLibrary.all[4],
+            PresetLibrary.preset(id: "audio-flac") ?? PresetLibrary.all[5]
+        ]
+    }
+    
+    var allPresets: [Preset] {
+        PresetLibrary.all
+    }
+    
+    func selectPreset(_ preset: Preset) {
+        self.activePreset = preset
+        UserDefaults.standard.set(preset.id, forKey: kActivePresetIdKey)
+        // 同步所有排队中的任务
+        for job in convertJobs where job.state == .ready || job.state == .pending {
+            job.preset = preset
+            buildConvertPlan(for: job)
+        }
     }
     
     // MARK: - 外观主题切换应用
@@ -145,8 +217,29 @@ public final class DownloadViewModel: ObservableObject {
         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: downloadFolderURL.path)
     }
     
+    public func selectConvertOutputFolder() {
+        let openPanel = NSOpenPanel()
+        openPanel.message = L10n.text(.saveLocation, lang: language)
+        openPanel.prompt = L10n.text(.changeFolder, lang: language)
+        openPanel.canChooseFiles = false
+        openPanel.canChooseDirectories = true
+        openPanel.canCreateDirectories = true
+        openPanel.allowsMultipleSelection = false
+        openPanel.directoryURL = convertOutputFolderURL
+        
+        if openPanel.runModal() == .OK, let selectedURL = openPanel.url {
+            self.convertOutputFolderURL = selectedURL
+            UserDefaults.standard.set(selectedURL.path, forKey: kConvertFolderKey)
+        }
+    }
+    
+    public func openConvertOutputFolder() {
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: convertOutputFolderURL.path)
+    }
+    
     public func refreshEnvironment() {
         self.environmentStatus = PathFinder.shared.checkEnvironment()
+        self.ffmpegReport = FFmpegCapabilities.query()
     }
     
     // MARK: - 剪贴板智能感知
@@ -163,19 +256,18 @@ public final class DownloadViewModel: ObservableObject {
     }
     
     public func checkClipboardOnActive() {
-        guard let current = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !current.isEmpty,
-              current != lastCheckedClipboard else { return }
+        guard let pasteboardString = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !pasteboardString.isEmpty else { return }
         
-        lastCheckedClipboard = current
-        let clean = YTDLPService.extractCleanURL(from: current)
+        // 避免重复识别完全相同的剪贴板文本
+        guard pasteboardString != lastCheckedClipboard else { return }
+        lastCheckedClipboard = pasteboardString
         
-        // 判定是否是合法视频网址
-        if clean.hasPrefix("http://") || clean.hasPrefix("https://") {
-            // 检查当前队列是否已存在
+        // 优先判断是否为视频链接
+        let extractedURLs = YTDLPService.extractAllCleanURLs(from: pasteboardString)
+        if let clean = extractedURLs.first {
             let alreadyInQueue = queueTasks.contains { $0.cleanURL == clean }
             if !alreadyInQueue {
-                // 如果当前输入框为空或已是旧链接，自动填入唯一输入框
                 if self.urlInput.isEmpty || self.urlInput.hasPrefix("http") {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         self.urlInput = clean
@@ -186,23 +278,78 @@ public final class DownloadViewModel: ObservableObject {
         }
     }
     
-    // MARK: - 浏览器直接拖入处理 (Drag & Drop)
+    // MARK: - 智能万能输入入口 (Smart Universal Input)
+    public func smartHandleInput() {
+        let trimmed = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            selectLocalFilesForConvert()
+            return
+        }
+        
+        // 1. 判断是否为本地文件路径
+        if trimmed.hasPrefix("/") || trimmed.hasPrefix("file://") || FileManager.default.fileExists(atPath: trimmed) {
+            let cleanPath = trimmed.replacingOccurrences(of: "file://", with: "")
+            let url = URL(fileURLWithPath: cleanPath)
+            addConvertFiles(urls: [url])
+            return
+        }
+        
+        // 2. 判断是否为网络视频链接
+        let extractedURLs = YTDLPService.extractAllCleanURLs(from: trimmed)
+        if !extractedURLs.isEmpty {
+            parseAndAdd(rawText: trimmed)
+            return
+        }
+        
+        // 3. 兜底尝试作为链接或打开文件选择器
+        if trimmed.lowercased().contains("http") {
+            parseAndAdd(rawText: trimmed)
+        } else {
+            selectLocalFilesForConvert()
+        }
+    }
+    
+    // MARK: - 全窗口拖拽投放 (Drag & Drop)
     public func handleDrop(providers: [NSItemProvider]) -> Bool {
         for provider in providers {
-            // 优先尝试作为 URL 读取
+            // 1. 尝试作为本地文件读取
+            if provider.hasItemConformingToTypeIdentifier("public.file-url") {
+                _ = provider.loadObject(ofClass: URL.self) { [weak self] url, _ in
+                    guard let url = url else { return }
+                    DispatchQueue.main.async {
+                        self?.addConvertFiles(urls: [url])
+                    }
+                }
+                return true
+            }
+            
+            // 2. 尝试作为网络 URL 读取
             if provider.hasItemConformingToTypeIdentifier("public.url") {
                 _ = provider.loadObject(ofClass: URL.self) { [weak self] url, _ in
                     guard let url = url else { return }
                     DispatchQueue.main.async {
-                        self?.parseAndAdd(rawText: url.absoluteString)
+                        if url.isFileURL {
+                            self?.addConvertFiles(urls: [url])
+                        } else {
+                            self?.parseAndAdd(rawText: url.absoluteString)
+                        }
                     }
                 }
                 return true
-            } else if provider.hasItemConformingToTypeIdentifier("public.plain-text") {
+            }
+            
+            // 3. 尝试作为纯文本读取
+            if provider.hasItemConformingToTypeIdentifier("public.plain-text") {
                 _ = provider.loadObject(ofClass: String.self) { [weak self] text, _ in
                     guard let text = text else { return }
                     DispatchQueue.main.async {
-                        self?.parseAndAdd(rawText: text)
+                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmed.hasPrefix("/") || trimmed.hasPrefix("file://") || FileManager.default.fileExists(atPath: trimmed) {
+                            let cleanPath = trimmed.replacingOccurrences(of: "file://", with: "")
+                            self?.addConvertFiles(urls: [URL(fileURLWithPath: cleanPath)])
+                        } else {
+                            self?.parseAndAdd(rawText: text)
+                        }
                     }
                 }
                 return true
@@ -211,7 +358,7 @@ public final class DownloadViewModel: ObservableObject {
         return false
     }
     
-    // MARK: - 阶段一：解析视频 (分析阶段，提取信息并在队列中呈现卡片，支持多链接批量提取)
+    // MARK: - 阶段一：解析视频 (下载队列)
     public func parseAndAdd(rawText: String) {
         let extractedURLs = YTDLPService.extractAllCleanURLs(from: rawText)
         guard !extractedURLs.isEmpty else { return }
@@ -221,7 +368,6 @@ public final class DownloadViewModel: ObservableObject {
         self.isClipboardAutoFilled = false
         
         for clean in extractedURLs {
-            // 避免重复添加正在解析、排队或下载中的完全相同网址
             if queueTasks.contains(where: { $0.cleanURL == clean && $0.isActiveOrPending }) {
                 continue
             }
@@ -241,12 +387,10 @@ public final class DownloadViewModel: ObservableObject {
         }
     }
     
-    // 兼容多行换行批量输入
     public func addURLToQueue(rawText: String) {
         parseAndAdd(rawText: rawText)
     }
     
-    // MARK: - 智能重试任务（自动判断是解析失败重试还是下载失败重试，杜绝死锁）
     public func retryTask(item: DownloadTaskItem) {
         if item.metadata == nil {
             startParsing(item: item)
@@ -255,9 +399,9 @@ public final class DownloadViewModel: ObservableObject {
         }
     }
     
-    // MARK: - 解析单个任务元数据
     public func startParsing(item: DownloadTaskItem) {
         item.status = .parsing
+        item.errorMessage = nil
         self.objectWillChange.send()
         
         Task {
@@ -268,12 +412,12 @@ public final class DownloadViewModel: ObservableObject {
                 )
                 await MainActor.run {
                     item.metadata = meta
+                    item.totalSize = meta.formattedFileSize
                     withAnimation {
                         item.status = .ready
                     }
                     self.objectWillChange.send()
                     
-                    // 仅在用户显式开启“自动开始下载”时才自动入队，否则保持待下载状态，完全由用户控制
                     if self.autoStartDownload {
                         self.enqueueDownload(item: item)
                     }
@@ -290,81 +434,62 @@ public final class DownloadViewModel: ObservableObject {
         }
     }
     
-    // MARK: - 触发单个任务进入下载排队
+    // MARK: - 阶段二：开始下载
     public func enqueueDownload(item: DownloadTaskItem) {
-        withAnimation {
-            item.status = .queued
+        guard let _ = item.metadata else { return }
+        item.status = .waiting
+        processDownloadQueue()
+    }
+    
+    public func startAllPendingDownloads() {
+        for task in queueTasks {
+            if case .ready = task.status {
+                task.status = .waiting
+            }
         }
         processDownloadQueue()
     }
     
-    // MARK: - 队列下载调度器 (按次序单任务下载，其余排队)
-    public func processDownloadQueue() {
-        let isDownloading = queueTasks.contains {
-            if case .downloading = $0.status { return true }
-            if case .merging = $0.status { return true }
-            return false
-        }
-        
-        // 当前有任务在下载或合并中，等待其完成
-        guard !isDownloading else { return }
-        
-        // 取出排队中最早的任务启动下载 (FIFO)
-        if let nextItem = queueTasks.reversed().first(where: { $0.status == .queued }) {
-            startDownloading(item: nextItem)
-        }
-    }
-    
-    // MARK: - 全部开始与全部暂停
-    public func startAll() {
-        var anyEnqueued = false
-        for item in queueTasks where item.status == .ready {
-            item.status = .queued
-            anyEnqueued = true
-        }
-        if anyEnqueued {
-            processDownloadQueue()
-        }
-    }
-    
-    public func pauseAll() {
+    public func pauseAllDownloads() {
         YTDLPService.shared.cancelCurrentTask()
-        withAnimation {
-            for item in queueTasks {
-                if case .downloading = item.status {
-                    item.status = .ready
-                } else if case .merging = item.status {
-                    item.status = .ready
-                } else if item.status == .queued {
-                    item.status = .ready
-                }
+        for task in queueTasks {
+            if case .downloading = task.status {
+                task.status = .ready
+            } else if case .waiting = task.status {
+                task.status = .ready
             }
         }
     }
     
-    // MARK: - 取消或暂停单个任务
-    public func cancelTask(item: DownloadTaskItem) {
-        if case .downloading = item.status {
-            YTDLPService.shared.cancelCurrentTask()
-            withAnimation { item.status = .ready }
-            processDownloadQueue()
-        } else if case .merging = item.status {
-            YTDLPService.shared.cancelCurrentTask()
-            withAnimation { item.status = .ready }
-            processDownloadQueue()
-        } else if item.status == .queued {
-            withAnimation { item.status = .ready }
-        }
+    public func startAll() {
+        startAllPendingDownloads()
     }
     
-    // MARK: - 执行单个任务下载
-    public func startDownloading(item: DownloadTaskItem) {
+    public func pauseAll() {
+        pauseAllDownloads()
+    }
+    
+    private func processDownloadQueue() {
+        let isAnyDownloading = queueTasks.contains {
+            if case .downloading = $0.status { return true }
+            if case .merging = $0.status { return true }
+            return false
+        }
+        guard !isAnyDownloading else { return }
+        
+        guard let nextTask = queueTasks.first(where: {
+            if case .waiting = $0.status { return true }
+            return false
+        }) else { return }
+        
+        executeDownload(item: nextTask)
+    }
+    
+    private func executeDownload(item: DownloadTaskItem) {
         guard let meta = item.metadata else { return }
         
         item.status = .downloading
         item.progress = 0.0
-        item.speed = "--"
-        item.eta = "--"
         
         var destination = downloadFolderURL
         if !FileManager.default.fileExists(atPath: destination.path) {
@@ -391,15 +516,12 @@ public final class DownloadViewModel: ObservableObject {
                     item.speed = newProgress.speed
                     item.eta = newProgress.eta
                     item.totalSize = newProgress.totalSize
-                }
-            },
-            onStatusChange: { [weak item] status in
-                DispatchQueue.main.async {
-                    if status.contains("ffmpeg") || status.contains("合并") {
-                        item?.status = .merging
+                    if newProgress.percentage >= 0.99 && item.status == .downloading {
+                        item.status = .merging
                     }
                 }
             },
+            onStatusChange: { _ in },
             onCompletion: { [weak self, weak item] result in
                 DispatchQueue.main.async {
                     guard let self = self, let item = item else { return }
@@ -421,7 +543,6 @@ public final class DownloadViewModel: ObservableObject {
                         HistoryManager.shared.addHistory(item: history)
                         self.historyItems = HistoryManager.shared.loadHistory()
                         
-                        // 提示用户：后台下载完成时，Dock 图标跳动提醒
                         NSApp.requestUserAttention(.informationalRequest)
                         
                     case .failure(let error):
@@ -433,14 +554,13 @@ public final class DownloadViewModel: ObservableObject {
                         }
                     }
                     
-                    // 流转下一个排队任务
                     self.processDownloadQueue()
                 }
             }
         )
     }
     
-    // MARK: - 任务控制与清理
+    // MARK: - 下载任务清理与控制
     public func removeTask(item: DownloadTaskItem) {
         if case .downloading = item.status {
             YTDLPService.shared.cancelCurrentTask()
@@ -453,6 +573,10 @@ public final class DownloadViewModel: ObservableObject {
         processDownloadQueue()
     }
     
+    public func cancelTask(item: DownloadTaskItem) {
+        removeTask(item: item)
+    }
+    
     public func clearCompleted() {
         withAnimation {
             queueTasks.removeAll {
@@ -462,12 +586,365 @@ public final class DownloadViewModel: ObservableObject {
         }
     }
     
+    // MARK: - 万能转换舱业务逻辑 (Transcode Engine)
+    
+    public func selectLocalFilesForConvert() {
+        let openPanel = NSOpenPanel()
+        openPanel.title = L10n.text(.selectFiles, lang: language)
+        openPanel.canChooseFiles = true
+        openPanel.canChooseDirectories = true
+        openPanel.allowsMultipleSelection = true
+        
+        if openPanel.runModal() == .OK {
+            addConvertFiles(urls: openPanel.urls)
+        }
+    }
+    
+    public func isSupportedMediaFile(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        let supported: Set<String> = [
+            "mp4", "mov", "m4v", "mkv", "webm", "avi", "ts", "m2ts", "mts",
+            "mpg", "mpeg", "mpe", "vob", "flv", "wmv", "gif", "3gp",
+            "mp3", "flac", "m4a", "aac", "aiff", "aif", "aifc", "caf", "wav",
+            "ogg", "oga", "opus", "wma", "ape", "alac", "ac3", "eac3", "dts"
+        ]
+        return supported.contains(ext) || AudioDecryptor.isEncrypted(url)
+    }
+    
+    public func addConvertFiles(urls: [URL]) {
+        var added = 0
+        let fm = FileManager.default
+        
+        for url in urls {
+            var filesToAdd: [URL] = []
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                if let enumerator = fm.enumerator(
+                    at: url,
+                    includingPropertiesForKeys: [.isRegularFileKey, .isHiddenKey],
+                    options: [.skipsHiddenFiles, .skipsPackageDescendants]
+                ) {
+                    while let fileURL = enumerator.nextObject() as? URL {
+                        if let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .isHiddenKey]),
+                           values.isRegularFile == true, values.isHidden != true,
+                           isSupportedMediaFile(fileURL) {
+                            filesToAdd.append(fileURL)
+                        }
+                    }
+                }
+            } else if isSupportedMediaFile(url) {
+                filesToAdd.append(url)
+            }
+            
+            for file in filesToAdd {
+                if convertJobs.contains(where: { $0.inputURL.standardizedFileURL == file.standardizedFileURL }) {
+                    continue
+                }
+                let job = TranscodeJob(inputURL: file, preset: activePreset)
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    self.convertJobs.insert(job, at: 0)
+                }
+                analyzeConvertJob(job: job)
+                added += 1
+            }
+        }
+        
+        if added > 0 {
+            self.currentTab = .convert
+            self.urlInput = ""
+        }
+    }
+    
+    func analyzeConvertJob(job: TranscodeJob) {
+        if job.isEncryptedSource {
+            job.state = .decrypting
+            job.progress = 0
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                do {
+                    let decryptedURL = try AudioDecryptor.shared.decrypt(fileAt: job.inputURL) { pct in
+                        DispatchQueue.main.async { job.progress = pct }
+                    }
+                    DispatchQueue.main.async {
+                        job.decryptedURL = decryptedURL
+                        job.tempDirectory = decryptedURL.deletingLastPathComponent()
+                        job.progress = 0
+                        self?.probeConvertJob(job: job)
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        job.state = .failed
+                        job.errorMessage = error.localizedDescription
+                    }
+                }
+            }
+            return
+        }
+        
+        probeConvertJob(job: job)
+    }
+    
+    private func probeConvertJob(job: TranscodeJob) {
+        job.state = .analyzing
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            do {
+                let info = try MediaProbe().probeSync(url: job.effectiveInputURL)
+                DispatchQueue.main.async {
+                    job.mediaInfo = info
+                    self?.buildConvertPlan(for: job)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    job.state = .failed
+                    job.errorMessage = "媒体探测失败: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+    
+    func buildConvertPlan(for job: TranscodeJob) {
+        guard let info = job.mediaInfo else { return }
+        guard info.hasVideo || info.audio != nil else {
+            job.state = .failed
+            job.errorMessage = "文件中没有可转换的音视频轨道"
+            return
+        }
+        
+        let outURL = defaultConvertOutputURL(for: job)
+        job.outputURL = outURL
+        job.outputContainer = job.preset.container
+        
+        let planner = ConversionPlanner()
+        let explicitMode: EncodeMode = useHardwareAcceleration ? .hardware : .software
+        let plan = planner.plan(input: info, outputURL: outURL, preset: job.preset, explicitMode: explicitMode)
+        job.plan = plan
+        job.state = .ready
+        
+        if isConverting {
+            scheduleConvert()
+        }
+    }
+    
+    private func defaultConvertOutputURL(for job: TranscodeJob) -> URL {
+        let base = job.inputURL.deletingPathExtension().lastPathComponent
+        let ext = job.preset.container.fileExtension
+        let folder = convertOutputFolderURL
+        let candidate = folder.appendingPathComponent("\(base)-converted.\(ext)")
+        return uniqueOutputURL(candidate)
+    }
+    
+    private func uniqueOutputURL(_ url: URL) -> URL {
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: url.path) { return url }
+        let base = url.deletingPathExtension().lastPathComponent
+        let ext = url.pathExtension
+        let dir = url.deletingLastPathComponent()
+        var i = 2
+        while true {
+            let candidate = dir.appendingPathComponent("\(base)-\(i).\(ext)")
+            if !fm.fileExists(atPath: candidate.path) { return candidate }
+            i += 1
+        }
+    }
+    
+    public func startConverting() {
+        if !hasRunnableConvertJobs {
+            requeueFinishedConvertJobs()
+        }
+        isConverting = true
+        scheduleConvert()
+    }
+    
+    public func stopConverting() {
+        isConverting = false
+        for (_, runner) in convertRunners {
+            runner.cancel()
+        }
+    }
+    
+    private var hasRunnableConvertJobs: Bool {
+        convertJobs.contains { job in
+            switch job.state {
+            case .pending, .decrypting, .analyzing, .ready, .running: return true
+            case .completed, .failed, .cancelled: return false
+            }
+        }
+    }
+    
+    private func requeueFinishedConvertJobs() {
+        for job in convertJobs {
+            switch job.state {
+            case .completed, .failed, .cancelled:
+                job.state = .pending
+                job.progress = 0
+                job.fps = 0
+                job.speedText = ""
+                job.errorMessage = nil
+                buildConvertPlan(for: job)
+            default:
+                break
+            }
+        }
+    }
+    
+    public func scheduleConvert() {
+        guard isConverting else { return }
+        
+        let runningCount = convertJobs.filter { $0.state == .running }.count
+        guard runningCount < maxConcurrentTranscodes else { return }
+        
+        for job in convertJobs where job.state == .ready || job.state == .pending {
+            if job.plan == nil, job.mediaInfo != nil {
+                buildConvertPlan(for: job)
+            }
+            guard let _ = job.plan else { continue }
+            runConvertJob(job: job)
+            if convertJobs.filter({ $0.state == .running }).count >= maxConcurrentTranscodes {
+                break
+            }
+        }
+        
+        if !convertJobs.isEmpty,
+           convertJobs.allSatisfy({ $0.state == .completed || $0.state == .failed || $0.state == .cancelled }) {
+            isConverting = false
+        }
+    }
+    
+    private func runConvertJob(job: TranscodeJob) {
+        guard let plan = job.plan else { return }
+        
+        let planner = ConversionPlanner()
+        let args = planner.makeArguments(plan: plan)
+        let duration = job.mediaInfo?.duration ?? 0
+        
+        let runner = TranscodeRunner()
+        convertRunners[job.id] = runner
+        job.state = .running
+        job.progress = 0
+        job.fps = 0
+        job.speedText = ""
+        
+        runner.run(
+            arguments: args,
+            duration: duration,
+            progress: { [weak job] pct, fps, speed in
+                job?.progress = pct
+                job?.fps = fps
+                job?.speedText = speed
+            },
+            completion: { [weak self, weak job] result in
+                guard let self = self, let job = job else { return }
+                self.convertRunners.removeValue(forKey: job.id)
+                
+                switch result {
+                case .success:
+                    job.state = .completed
+                    job.progress = 1.0
+                    self.cleanupTemp(for: job)
+                    
+                    if let outURL = job.outputURL {
+                        var sizeStr = "--"
+                        if let attrs = try? FileManager.default.attributesOfItem(atPath: outURL.path),
+                           let size = attrs[.size] as? NSNumber {
+                            sizeStr = ByteCountFormatter.string(fromByteCount: size.int64Value, countStyle: .file)
+                        }
+                        
+                        let historyItem = DownloadHistoryItem(
+                            title: job.fileName + " (\(job.preset.name))",
+                            thumbnailURL: nil,
+                            platform: .convert,
+                            filePath: outURL.path,
+                            fileSizeString: sizeStr,
+                            durationString: job.durationLabel
+                        )
+                        HistoryManager.shared.addHistory(item: historyItem)
+                        self.historyItems = HistoryManager.shared.loadHistory()
+                    }
+                    
+                    NSApp.requestUserAttention(.informationalRequest)
+                    
+                case .failure(let err):
+                    self.cleanupTemp(for: job)
+                    self.discardPartialOutput(for: job)
+                    if let te = err as? TranscodeError, case .cancelled = te {
+                        job.state = .cancelled
+                        job.progress = 0
+                    } else {
+                        job.state = .failed
+                        job.progress = 0
+                        job.errorMessage = err.localizedDescription
+                    }
+                }
+                
+                self.scheduleConvert()
+            }
+        )
+    }
+    
+    func cancelConvertJob(job: TranscodeJob) {
+        if let runner = convertRunners[job.id] {
+            runner.cancel()
+        }
+        job.state = .cancelled
+        job.progress = 0
+        cleanupTemp(for: job)
+        discardPartialOutput(for: job)
+        scheduleConvert()
+    }
+    
+    func removeConvertJob(job: TranscodeJob) {
+        cancelConvertJob(job: job)
+        withAnimation {
+            convertJobs.removeAll { $0.id == job.id }
+        }
+    }
+    
+    func retryConvertJob(job: TranscodeJob) {
+        job.state = .pending
+        job.progress = 0
+        job.fps = 0
+        job.speedText = ""
+        job.errorMessage = nil
+        analyzeConvertJob(job: job)
+    }
+    
+    public func clearCompletedConvertJobs() {
+        withAnimation {
+            convertJobs.removeAll { $0.state == .completed || $0.state == .cancelled }
+        }
+    }
+    
+    private func cleanupTemp(for job: TranscodeJob) {
+        guard let dir = job.tempDirectory else { return }
+        try? FileManager.default.removeItem(at: dir)
+        job.tempDirectory = nil
+        job.decryptedURL = nil
+    }
+    
+    private func discardPartialOutput(for job: TranscodeJob) {
+        guard let url = job.outputURL else { return }
+        let fm = FileManager.default
+        if fm.fileExists(atPath: url.path) && url.lastPathComponent.contains("-converted") {
+            try? fm.removeItem(at: url)
+        }
+    }
+    
+    // MARK: - 从下载历史一键转码 (One-Click Convert from History)
+    func convertDownloadedItem(item: DownloadHistoryItem, preset: Preset? = nil) {
+        guard item.fileExists else { return }
+        let targetPreset = preset ?? activePreset
+        let job = TranscodeJob(inputURL: item.fileURL, preset: targetPreset)
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            self.convertJobs.insert(job, at: 0)
+            self.currentTab = .convert
+        }
+        analyzeConvertJob(job: job)
+    }
+    
     // MARK: - 原生 QuickLook 空格预览与访达定位
     public func previewItem(fileURL: URL) {
         QuickLookHelper.shared.preview(fileURL: fileURL)
     }
     
-    /// 空格快捷键唤起：智能寻找最新完成或可用的视频进行原生预览
     public func previewActiveOrLatestCompletedItem() {
         if let completed = queueTasks.first(where: {
             if case .completed = $0.status { return true }

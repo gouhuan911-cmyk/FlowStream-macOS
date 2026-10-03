@@ -112,6 +112,38 @@ public struct L10n {
             return lang == .zh ? "白天" : "Light"
         case .appearanceDark:
             return lang == .zh ? "黑夜" : "Dark"
+        case .tabConvert:
+            return lang == .zh ? "🔄 万能转换" : "🔄 Convert"
+        case .smartInputPlaceholder:
+            return lang == .zh ? "输入网页视频链接 或 拖入本地媒体文件 (自动识别)..." : "Enter web URL or drop local media files (Auto-detect)..."
+        case .smartActionBtn:
+            return lang == .zh ? "🚀 智能解析 / 转码" : "🚀 Smart Action"
+        case .startTranscode:
+            return lang == .zh ? "⚡️ 极速转码" : "⚡️ Transcode"
+        case .hardwareAcceleration:
+            return lang == .zh ? "⚡️ VideoToolbox 硬件加速" : "⚡️ VideoToolbox Turbo"
+        case .quickPresetsTitle:
+            return lang == .zh ? "常用预设" : "Presets"
+        case .morePresets:
+            return lang == .zh ? "更多预设" : "More Presets"
+        case .oneClickConvert:
+            return lang == .zh ? "🔄 一键转码" : "🔄 Transcode"
+        case .selectFiles:
+            return lang == .zh ? "浏览文件" : "Browse Files"
+        case .emptyConvertTitle:
+            return lang == .zh ? "拖入媒体文件或加密音乐即可转换" : "Drop Media Files or Encrypted Music Here"
+        case .emptyConvertSubtitle:
+            return lang == .zh ? "内置 28 种主流影音预设 · VideoToolbox 硬件加速 · NCM/MFLAC 音乐秒级解锁" : "28 media presets · Apple Silicon VideoToolbox GPU acceleration · Instant NCM/MFLAC unlock"
+        case .convertSettings:
+            return lang == .zh ? "视频与音频转换" : "Conversion Settings"
+        case .transcoding:
+            return lang == .zh ? "正在极速转码..." : "Transcoding..."
+        case .analyzing:
+            return lang == .zh ? "正在分析媒体..." : "Analyzing..."
+        case .decrypting:
+            return lang == .zh ? "正在解密音乐..." : "Decrypting..."
+        case .directCopy:
+            return lang == .zh ? "无损直拷" : "Direct Copy"
         }
     }
     
@@ -126,6 +158,9 @@ public struct L10n {
         case envOk, envMissing
         case settings, done, close
         case appearance, appearanceSystem, appearanceLight, appearanceDark
+        case tabConvert, smartInputPlaceholder, smartActionBtn, startTranscode, hardwareAcceleration
+        case quickPresetsTitle, morePresets, oneClickConvert, selectFiles
+        case emptyConvertTitle, emptyConvertSubtitle, convertSettings, transcoding, analyzing, decrypting, directCopy
     }
 }
 

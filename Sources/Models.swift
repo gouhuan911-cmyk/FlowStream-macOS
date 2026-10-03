@@ -10,6 +10,7 @@ public enum VideoPlatform: String, Codable {
     case kuaishou = "快手"
     case tiktok = "TikTok"
     case wechat = "微信视频号"
+    case convert = "万能转换"
     case other = "通用网络"
     
     public static func detect(from urlString: String) -> VideoPlatform {
@@ -33,6 +34,7 @@ public enum VideoPlatform: String, Codable {
         case .youtube: return "play.rectangle.fill"
         case .kuaishou: return "video.fill"
         case .tiktok: return "sparkles.tv"
+        case .convert: return "arrow.triangle.2.circlepath.circle.fill"
         case .other: return "globe"
         }
     }
@@ -46,6 +48,7 @@ public enum VideoPlatform: String, Codable {
         case .youtube: return Color(red: 0.95, green: 0.2, blue: 0.2) // 经典红
         case .kuaishou: return Color(red: 1.0, green: 0.5, blue: 0.1) // 橙色
         case .tiktok: return Color(red: 0.2, green: 0.9, blue: 0.8)
+        case .convert: return Color(red: 0.0, green: 0.82, blue: 0.92) // 流光亮青
         case .other: return Color.gray
         }
     }
@@ -89,10 +92,11 @@ public enum AppearanceMode: String, CaseIterable, Identifiable, Codable {
 
 /// 视频画质与格式选项
 public enum DownloadQuality: String, CaseIterable, Identifiable, Codable {
-    case best = "最高画质"
-    case p1080 = "1080P"
-    case p720 = "720P"
-    case audioMP3 = "仅音频 (MP3)"
+    case best = "最高画质 (4K/8K)"
+    case p1080 = "1080P 高清"
+    case p720 = "720P 标清"
+    case audioMP3 = "高保真 MP3 (含内嵌封面)"
+    case audioM4A = "无损原声 M4A"
     
     public var id: String { rawValue }
     
@@ -102,15 +106,17 @@ public enum DownloadQuality: String, CaseIterable, Identifiable, Codable {
         case .p1080: return "tv"
         case .p720: return "play.rectangle"
         case .audioMP3: return "waveform"
+        case .audioM4A: return "music.note"
         }
     }
     
     public func localizedName(lang: AppLanguage) -> String {
         switch self {
-        case .best: return lang == .zh ? "最高画质" : "Best Quality"
-        case .p1080: return "1080P"
-        case .p720: return "720P"
-        case .audioMP3: return lang == .zh ? "仅音频 (MP3)" : "Audio (MP3)"
+        case .best: return lang == .zh ? "最高画质 (4K/8K)" : "Best (4K/8K)"
+        case .p1080: return lang == .zh ? "1080P 高清" : "1080P HD"
+        case .p720: return lang == .zh ? "720P 标清" : "720P"
+        case .audioMP3: return lang == .zh ? "高保真 MP3 (含内嵌封面)" : "Hi-Fi MP3 (Cover Art)"
+        case .audioM4A: return lang == .zh ? "无损原声 M4A" : "Lossless M4A"
         }
     }
     
@@ -135,9 +141,81 @@ public enum DownloadQuality: String, CaseIterable, Identifiable, Codable {
             return [
                 "-x",
                 "--audio-format", "mp3",
-                "--audio-quality", "0"
+                "--audio-quality", "0",
+                "--embed-thumbnail",
+                "--add-metadata"
+            ]
+        case .audioM4A:
+            return [
+                "-x",
+                "--audio-format", "m4a",
+                "--embed-thumbnail",
+                "--add-metadata"
             ]
         }
+    }
+}
+
+/// 浏览器登录态导入来源 (支持 B站大会员 / YouTube 私享内容)
+public enum BrowserCookieSource: String, CaseIterable, Identifiable, Codable {
+    case none = "不导入"
+    case safari = "Safari"
+    case chrome = "Google Chrome"
+    case edge = "Microsoft Edge"
+    case firefox = "Firefox"
+    
+    public var id: String { rawValue }
+    
+    public var argumentValue: String? {
+        switch self {
+        case .none: return nil
+        case .safari: return "safari"
+        case .chrome: return "chrome"
+        case .edge: return "edge"
+        case .firefox: return "firefox"
+        }
+    }
+}
+
+/// 播放列表 / 分P 单集数据项
+public struct PlaylistItem: Identifiable, Codable, Hashable {
+    public let id: String
+    public let index: Int
+    public let title: String
+    public let url: String
+    public let durationString: String?
+    public var isSelected: Bool
+    
+    public init(
+        id: String = UUID().uuidString,
+        index: Int,
+        title: String,
+        url: String,
+        durationString: String? = nil,
+        isSelected: Bool = true
+    ) {
+        self.id = id
+        self.index = index
+        self.title = title
+        self.url = url
+        self.durationString = durationString
+        self.isSelected = isSelected
+    }
+}
+
+/// 播放列表 / 分P 集合模型
+public struct PlaylistInfo: Identifiable, Codable {
+    public var id: String { url }
+    public let url: String
+    public let title: String
+    public let platform: VideoPlatform
+    public var items: [PlaylistItem]
+    
+    public init(url: String, title: String, platform: VideoPlatform, items: [PlaylistItem]) {
+        self.url = url
+        self.title = title
+        self.platform = platform
+        self.items = items
     }
 }
 
@@ -246,6 +324,10 @@ public final class DownloadTaskItem: Identifiable, ObservableObject {
     
     @Published public var metadata: VideoMetadata?
     @Published public var quality: DownloadQuality = .best
+    public var selectedQuality: DownloadQuality {
+        get { quality }
+        set { quality = newValue }
+    }
     @Published public var status: TaskItemStatus = .waiting
     @Published public var progress: Double = 0.0
     @Published public var speed: String = "--"
