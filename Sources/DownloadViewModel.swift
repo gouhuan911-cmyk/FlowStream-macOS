@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import UserNotifications
 
 public enum MainTab: String, CaseIterable, Identifiable {
     case queue = "queue"       // 📥 网络下载
@@ -12,6 +13,7 @@ public enum MainTab: String, CaseIterable, Identifiable {
 
 @MainActor
 public final class DownloadViewModel: ObservableObject {
+    public static weak var shared: DownloadViewModel?
     // MARK: - 基础导航与语言
     @Published public var currentTab: MainTab = .queue
     @Published public var language: AppLanguage = .zh
@@ -73,6 +75,20 @@ public final class DownloadViewModel: ObservableObject {
         }
     }
     
+    // MARK: - 浏览器登录态 Cookie (解锁 B站大会员 / YouTube 私享)
+    @Published public var browserCookieSource: BrowserCookieSource = .none {
+        didSet {
+            UserDefaults.standard.set(browserCookieSource.rawValue, forKey: kBrowserCookieKey)
+        }
+    }
+    
+    // MARK: - 系统通知提醒
+    @Published public var enableSystemNotifications: Bool = true {
+        didSet {
+            UserDefaults.standard.set(enableSystemNotifications, forKey: kEnableNotificationsKey)
+        }
+    }
+    
     // MARK: - 设置面板
     @Published public var isSettingsPresented: Bool = false
     
@@ -87,6 +103,8 @@ public final class DownloadViewModel: ObservableObject {
     private let kLanguageKey = "FlowStream_Language_v2"
     private let kAutoStartDownloadKey = "FlowStream_AutoStartDownload_v2"
     private let kAppearanceModeKey = "FlowStream_AppearanceMode_v2"
+    private let kBrowserCookieKey = "FlowStream_BrowserCookieSource_v2"
+    private let kEnableNotificationsKey = "FlowStream_EnableNotifications_v2"
     private var lastCheckedClipboard: String = ""
     
     public init() {
@@ -155,12 +173,28 @@ public final class DownloadViewModel: ObservableObject {
             self.appearanceMode = .system
         }
         
+        // 读取浏览器登录态来源
+        if let savedCookie = UserDefaults.standard.string(forKey: kBrowserCookieKey),
+           let source = BrowserCookieSource(rawValue: savedCookie) {
+            self.browserCookieSource = source
+        } else {
+            self.browserCookieSource = .none
+        }
+        
+        // 读取系统通知开关
+        if UserDefaults.standard.object(forKey: kEnableNotificationsKey) != nil {
+            self.enableSystemNotifications = UserDefaults.standard.bool(forKey: kEnableNotificationsKey)
+        } else {
+            self.enableSystemNotifications = true
+        }
+        
         // 加载历史记录
         self.historyItems = HistoryManager.shared.loadHistory()
         
         refreshEnvironment()
         setupAppActiveNotification()
         applyAppearance()
+        DownloadViewModel.shared = self
     }
     
     // MARK: - 常用预设列表与切换
@@ -253,6 +287,47 @@ public final class DownloadViewModel: ObservableObject {
     public func refreshEnvironment() {
         self.environmentStatus = PathFinder.shared.checkEnvironment()
         self.ffmpegReport = FFmpegCapabilities.query()
+    }
+    
+    // MARK: - 程序坞 Dock 角标与系统通知
+    public func updateDockBadge() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            let downloadingCount = self.queueTasks.filter {
+                if case .downloading = $0.status { return true }
+                if case .merging = $0.status { return true }
+                return false
+            }.count
+            let convertingCount = self.convertJobs.filter {
+                $0.state == .running || $0.state == .decrypting
+            }.count
+            let totalActive = downloadingCount + convertingCount
+            if totalActive > 0 {
+                NSApp.dockTile.badgeLabel = "\(totalActive)"
+            } else {
+                NSApp.dockTile.badgeLabel = nil
+            }
+        }
+    }
+    
+    public func sendSystemNotification(title: String, body: String, fileURL: URL? = nil) {
+        guard enableSystemNotifications else { return }
+        let center = UNUserNotificationCenter.current()
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        if let fileURL = fileURL {
+            content.userInfo = ["filePath": fileURL.path]
+        }
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        center.add(request, withCompletionHandler: nil)
+    }
+    
+    public func cleanupOnTerminate() {
+        YTDLPService.shared.cancelCurrentTask()
+        stopConverting()
+        NSApp.dockTile.badgeLabel = nil
     }
     
     // MARK: - 剪贴板智能感知
@@ -421,7 +496,8 @@ public final class DownloadViewModel: ObservableObject {
             do {
                 let meta = try await YTDLPService.shared.parseMetadata(
                     rawInput: item.cleanURL,
-                    removeWatermark: removeWatermark
+                    removeWatermark: removeWatermark,
+                    cookieSource: browserCookieSource
                 )
                 await MainActor.run {
                     item.metadata = meta
@@ -503,6 +579,7 @@ public final class DownloadViewModel: ObservableObject {
         
         item.status = .downloading
         item.progress = 0.0
+        self.updateDockBadge()
         
         var destination = downloadFolderURL
         if !FileManager.default.fileExists(atPath: destination.path) {
@@ -522,6 +599,7 @@ public final class DownloadViewModel: ObservableObject {
             destinationFolder: destination,
             removeWatermark: removeWatermark,
             concurrentFragments: concurrentFragments,
+            cookieSource: browserCookieSource,
             onProgress: { [weak item] newProgress in
                 DispatchQueue.main.async {
                     guard let item = item else { return }
@@ -557,6 +635,8 @@ public final class DownloadViewModel: ObservableObject {
                         self.historyItems = HistoryManager.shared.loadHistory()
                         
                         NSApp.requestUserAttention(.informationalRequest)
+                        self.sendSystemNotification(title: "下载已完成", body: meta.title, fileURL: outputURL)
+                        self.updateDockBadge()
                         
                     case .failure(let error):
                         if let ytError = error as? YTDLPError, case .cancelled = ytError {
@@ -565,6 +645,7 @@ public final class DownloadViewModel: ObservableObject {
                             item.status = .failed(error: error.localizedDescription)
                             item.errorMessage = error.localizedDescription
                         }
+                        self.updateDockBadge()
                     }
                     
                     self.processDownloadQueue()
@@ -772,6 +853,7 @@ public final class DownloadViewModel: ObservableObject {
         for (_, runner) in convertRunners {
             runner.cancel()
         }
+        updateDockBadge()
     }
     
     private var hasRunnableConvertJobs: Bool {
@@ -835,6 +917,7 @@ public final class DownloadViewModel: ObservableObject {
         job.progress = 0
         job.fps = 0
         job.speedText = ""
+        self.updateDockBadge()
         
         runner.run(
             arguments: args,
@@ -874,6 +957,8 @@ public final class DownloadViewModel: ObservableObject {
                     }
                     
                     NSApp.requestUserAttention(.informationalRequest)
+                    self.sendSystemNotification(title: "媒体转换完成", body: job.outputURL?.lastPathComponent ?? job.fileName, fileURL: job.outputURL)
+                    self.updateDockBadge()
                     
                 case .failure(let err):
                     self.cleanupTemp(for: job)
@@ -886,6 +971,7 @@ public final class DownloadViewModel: ObservableObject {
                         job.progress = 0
                         job.errorMessage = err.localizedDescription
                     }
+                    self.updateDockBadge()
                 }
                 
                 self.scheduleConvert()

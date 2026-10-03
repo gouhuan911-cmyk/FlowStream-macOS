@@ -57,7 +57,7 @@ public final class YTDLPService {
     // MARK: - 阶段一：元数据异步解析
     
     /// 统一入口：智能分流解析
-    public func parseMetadata(rawInput: String, removeWatermark: Bool = true) async throws -> VideoMetadata {
+    public func parseMetadata(rawInput: String, removeWatermark: Bool = true, cookieSource: BrowserCookieSource = .none) async throws -> VideoMetadata {
         // 1. 彻底提取出纯净 URL，去除各种“复制打开抖音/小红书”口令杂质
         let cleanURLString = YTDLPService.extractCleanURL(from: rawInput)
         guard let url = URL(string: cleanURLString) else {
@@ -106,7 +106,7 @@ public final class YTDLPService {
         }
         
         // 7. 调用通用 yt-dlp 引擎解析（支持 YouTube、小红书、快手、TikTok 等海量平台）
-        return try await parseViaYTDLP(url: targetURLString, removeWatermark: removeWatermark)
+        return try await parseViaYTDLP(url: targetURLString, removeWatermark: removeWatermark, cookieSource: cookieSource)
     }
     
     /// Bilibili 官方开放接口 0.15 秒极速元数据解析
@@ -217,7 +217,7 @@ public final class YTDLPService {
     }
     
     /// 底层 yt-dlp 元数据解析（极速优化版：移除 ffmpeg 扫描、注入 YouTube Android 协议、阻断预下载）
-    private func parseViaYTDLP(url: String, removeWatermark: Bool) async throws -> VideoMetadata {
+    private func parseViaYTDLP(url: String, removeWatermark: Bool, cookieSource: BrowserCookieSource = .none) async throws -> VideoMetadata {
         guard let ytdlpPath = PathFinder.shared.resolveYtDlpPath() else {
             throw YTDLPError.binaryNotFound(name: "yt-dlp")
         }
@@ -235,6 +235,10 @@ public final class YTDLPService {
                     "--no-check-certificates",
                     "--retries", "1"
                 ]
+                
+                if let browser = cookieSource.argumentValue {
+                    arguments.append(contentsOf: ["--cookies-from-browser", browser])
+                }
                 
                 // 针对 YouTube 注入 Android 客户端协议，免除繁重的 Web 端 JS 挑战解密，耗时减半
                 if url.contains("youtube.com") || url.contains("youtu.be") {
@@ -298,6 +302,7 @@ public final class YTDLPService {
         destinationFolder: URL,
         removeWatermark: Bool = true,
         concurrentFragments: Int = 4,
+        cookieSource: BrowserCookieSource = .none,
         onProgress: @escaping (DownloadProgress) -> Void,
         onStatusChange: @escaping (String) -> Void,
         onCompletion: @escaping (Result<URL, Error>) -> Void
@@ -371,6 +376,9 @@ public final class YTDLPService {
                     "-o", "%(title)s.%(ext)s"
                 ])
                 arguments.append(contentsOf: quality.ytdlpArguments(removeWatermark: removeWatermark))
+                if let browser = cookieSource.argumentValue {
+                    arguments.append(contentsOf: ["--cookies-from-browser", browser])
+                }
                 arguments.append(metadata.url)
             }
             

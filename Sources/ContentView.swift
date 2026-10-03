@@ -1657,6 +1657,13 @@ struct SettingsSheetView: View {
             Toggle("自动开始下载 (无需手动点击)", isOn: $viewModel.autoStartDownload)
             Toggle("无水印高清原画 (支持平台自动去印)", isOn: $viewModel.removeWatermark)
             
+            Picker("浏览器登录态 Cookie", selection: $viewModel.browserCookieSource) {
+                ForEach(BrowserCookieSource.allCases) { source in
+                    Text(source.rawValue).tag(source)
+                }
+            }
+            .help("导入浏览器已登录 Cookie，可解锁 B站大会员 1080P60/4K 原画及 YouTube 私享视频")
+            
             Stepper("并发下载分片数: \(viewModel.concurrentFragments)", value: $viewModel.concurrentFragments, in: 1...16)
         }
     }
@@ -1704,6 +1711,8 @@ struct SettingsSheetView: View {
                     Text(lang.displayName).tag(lang)
                 }
             }
+            
+            Toggle("任务完成发送 macOS 系统通知", isOn: $viewModel.enableSystemNotifications)
             
             HStack {
                 Text("系统依赖状态:")

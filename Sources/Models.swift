@@ -10,6 +10,10 @@ public enum VideoPlatform: String, Codable {
     case kuaishou = "快手"
     case tiktok = "TikTok"
     case iqiyi = "爱奇艺"
+    case weibo = "微博"
+    case twitter = "X (Twitter)"
+    case xigua = "西瓜视频"
+    case tencent = "腾讯视频"
     case wechat = "微信视频号"
     case convert = "万能转换"
     case other = "通用网络"
@@ -24,6 +28,10 @@ public enum VideoPlatform: String, Codable {
         if lower.contains("kuaishou.com") { return .kuaishou }
         if lower.contains("tiktok.com") { return .tiktok }
         if lower.contains("iqiyi.com") || lower.contains("pps.tv") { return .iqiyi }
+        if lower.contains("weibo.com") || lower.contains("weibo.cn") { return .weibo }
+        if lower.contains("twitter.com") || lower.contains("x.com") { return .twitter }
+        if lower.contains("ixigua.com") { return .xigua }
+        if lower.contains("v.qq.com") { return .tencent }
         return .other
     }
     
@@ -37,6 +45,10 @@ public enum VideoPlatform: String, Codable {
         case .kuaishou: return "video.fill"
         case .tiktok: return "sparkles.tv"
         case .iqiyi: return "play.tv.fill"
+        case .weibo: return "newspaper.fill"
+        case .twitter: return "bubble.left.and.bubble.right.fill"
+        case .xigua: return "play.rectangle.fill"
+        case .tencent: return "play.tv.fill"
         case .convert: return "arrow.triangle.2.circlepath.circle.fill"
         case .other: return "globe"
         }
@@ -52,6 +64,10 @@ public enum VideoPlatform: String, Codable {
         case .kuaishou: return Color(red: 1.0, green: 0.5, blue: 0.1) // 橙色
         case .tiktok: return Color(red: 0.2, green: 0.9, blue: 0.8)
         case .iqiyi: return Color(red: 0.0, green: 0.85, blue: 0.35) // 爱奇艺标志性荧光绿
+        case .weibo: return Color(red: 0.95, green: 0.25, blue: 0.25) // 微博红
+        case .twitter: return Color(red: 0.1, green: 0.6, blue: 0.92) // 经典推特蓝
+        case .xigua: return Color(red: 0.98, green: 0.2, blue: 0.28) // 西瓜红
+        case .tencent: return Color(red: 0.05, green: 0.5, blue: 0.98) // 企鹅科技蓝
         case .convert: return Color(red: 0.0, green: 0.82, blue: 0.92) // 流光亮青
         case .other: return Color.gray
         }
@@ -161,7 +177,7 @@ public enum DownloadQuality: String, CaseIterable, Identifiable, Codable {
 }
 
 /// 浏览器登录态导入来源 (支持 B站大会员 / YouTube 私享内容)
-public enum BrowserCookieSource: String, CaseIterable, Identifiable, Codable {
+public enum BrowserCookieSource: String, CaseIterable, Identifiable, Codable, Sendable {
     case none = "不导入"
     case safari = "Safari"
     case chrome = "Google Chrome"
