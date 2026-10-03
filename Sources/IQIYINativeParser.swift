@@ -136,8 +136,23 @@ public final class IQIYINativeParser {
         
         guard let jsonData = text.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-              let dataDict = json["data"] as? [String: Any],
-              let vidl = dataDict["vidl"] as? [[String: Any]] else {
+              let dataDict = json["data"] as? [String: Any] else {
+            return []
+        }
+        
+        // 检查爱奇艺 BOSS 鉴权与会员专属状态
+        if let boss = dataDict["bossInfo"] as? [String: Any],
+           let status = boss["status"] as? String {
+            if status == "Q00304" || status == "Q00301" {
+                throw YTDLPError.executionFailed(message: "该视频为爱奇艺【VIP会员专享剧集】，受官方版权加密保护 (DRM) 无法直接下载。(第1~2集等免费开放试看剧集可直接下载)")
+            } else if status == "Q00308" {
+                throw YTDLPError.executionFailed(message: "该视频为爱奇艺【超前点播/单点付费】内容，受数字版权保护无法直接下载。")
+            } else if status == "Q00302" {
+                throw YTDLPError.executionFailed(message: "该视频受爱奇艺【区域版权保护】，当前网络地区无法解析。")
+            }
+        }
+        
+        guard let vidl = dataDict["vidl"] as? [[String: Any]] else {
             return []
         }
         
