@@ -63,7 +63,12 @@ public final class DownloadViewModel: ObservableObject {
     // MARK: - 全局配置
     @Published public var downloadFolderURL: URL
     @Published public var removeWatermark: Bool = true
-    @Published public var concurrentFragments: Int = 4
+    private let kConcurrentFragmentsKey = "FlowStream_ConcurrentFragments_v2"
+    @Published public var concurrentFragments: Int = 8 {
+        didSet {
+            UserDefaults.standard.set(concurrentFragments, forKey: kConcurrentFragmentsKey)
+        }
+    }
     @Published public var autoStartDownload: Bool = false
     @Published public var environmentStatus: EnvironmentStatus = PathFinder.shared.checkEnvironment()
     
@@ -148,6 +153,13 @@ public final class DownloadViewModel: ObservableObject {
             self.removeWatermark = UserDefaults.standard.bool(forKey: kRemoveWatermarkKey)
         } else {
             self.removeWatermark = true
+        }
+        
+        // 读取并发分片线程数 (默认 8x 极速狂飙)
+        if let savedFrag = UserDefaults.standard.object(forKey: kConcurrentFragmentsKey) as? Int, savedFrag >= 1 {
+            self.concurrentFragments = savedFrag
+        } else {
+            self.concurrentFragments = 8
         }
         
         // 读取自动开始下载开关

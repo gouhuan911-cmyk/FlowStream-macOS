@@ -358,6 +358,11 @@ public final class YTDLPService {
                     headers.append(contentsOf: ["--add-header", "Referer: https://m.iqiyi.com/"])
                 }
                 
+                if concurrentFragments > 1 {
+                    arguments.append(contentsOf: ["-N", "\(concurrentFragments)"])
+                }
+                arguments.append(contentsOf: ["--buffer-size", "1M"])
+                
                 arguments.append(contentsOf: [
                     "-o", "\(cleanSafeTitle.prefix(50)).%(ext)s",
                     "--no-check-certificates"
@@ -372,6 +377,8 @@ public final class YTDLPService {
                 if concurrentFragments > 1 {
                     arguments.append(contentsOf: ["-N", "\(concurrentFragments)"])
                 }
+                arguments.append(contentsOf: ["--buffer-size", "1M"])
+                
                 arguments.append(contentsOf: [
                     "-o", "%(title)s.%(ext)s"
                 ])

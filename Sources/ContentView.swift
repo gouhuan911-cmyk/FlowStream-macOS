@@ -698,24 +698,73 @@ struct SubActionBarView: View {
                 historyControls
             }
             
-            // 右侧 VideoToolbox 硬件加速开关药丸 (效果图方案 A 标配)
-            HStack(spacing: 7) {
-                Image(systemName: "bolt.fill")
-                    .foregroundColor(viewModel.useHardwareAcceleration ? .yellow : .secondary)
-                    .font(.system(size: 11))
-                Text(viewModel.language == .zh ? "VideoToolbox 硬件加速" : "VideoToolbox Turbo")
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundColor(viewModel.useHardwareAcceleration ? .primary : .secondary)
-                Toggle("", isOn: $viewModel.useHardwareAcceleration)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
-                    .controlSize(.small)
-                    .tint(Color(red: 0.1, green: 0.85, blue: 0.85))
+            // 右侧加速状态控制区：下载舱显示并发下载加速，转换舱显示 VideoToolbox 硬件加速
+            if viewModel.currentTab == .queue {
+                Menu {
+                    Button(action: { viewModel.concurrentFragments = 1 }) {
+                        Label(viewModel.language == .zh ? "1x 标准单线程 (低带宽省流)" : "1x Standard (Single-thread)", systemImage: viewModel.concurrentFragments == 1 ? "checkmark" : "")
+                    }
+                    Button(action: { viewModel.concurrentFragments = 4 }) {
+                        Label(viewModel.language == .zh ? "4x 多线程加速 (日常均衡)" : "4x Turbo (Balanced)", systemImage: viewModel.concurrentFragments == 4 ? "checkmark" : "")
+                    }
+                    Button(action: { viewModel.concurrentFragments = 8 }) {
+                        Label(viewModel.language == .zh ? "8x 极速狂飙 (满带宽推荐)" : "8x High-Speed (Full Bandwidth)", systemImage: viewModel.concurrentFragments == 8 ? "checkmark" : "")
+                    }
+                    Button(action: { viewModel.concurrentFragments = 16 }) {
+                        Label(viewModel.language == .zh ? "16x 极限多线程 (千兆宽带冲刺)" : "16x Extreme (Gigabit Broadband)", systemImage: viewModel.concurrentFragments == 16 ? "checkmark" : "")
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "bolt.badge.automatic.fill")
+                            .foregroundColor(.yellow)
+                            .font(.system(size: 11))
+                        Text("\(viewModel.concurrentFragments)x \(viewModel.language == .zh ? "并发加速" : "Turbo")")
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 8))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 3.5)
+                    .background(Capsule().fill(Color.black.opacity(0.35)))
+                    .overlay(Capsule().stroke(Color.yellow.opacity(0.4), lineWidth: 1))
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("突破 CDN 单连接限速，支持 1x ~ 16x 多线程分片并发下载，跑满高速宽带")
+            } else if viewModel.currentTab == .convert {
+                HStack(spacing: 7) {
+                    Image(systemName: "bolt.fill")
+                        .foregroundColor(viewModel.useHardwareAcceleration ? .yellow : .secondary)
+                        .font(.system(size: 11))
+                    Text(viewModel.language == .zh ? "VideoToolbox 硬件加速" : "VideoToolbox Turbo")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundColor(viewModel.useHardwareAcceleration ? .primary : .secondary)
+                    Toggle("", isOn: $viewModel.useHardwareAcceleration)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .tint(Color(red: 0.1, green: 0.85, blue: 0.85))
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 3.5)
+                .background(Capsule().fill(Color.black.opacity(0.35)))
+                .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1))
+            } else {
+                HStack(spacing: 5) {
+                    Image(systemName: "bolt.badge.automatic.fill")
+                        .foregroundColor(.yellow)
+                        .font(.system(size: 11))
+                    Text("\(viewModel.concurrentFragments)x \(viewModel.language == .zh ? "并发加速" : "Turbo")")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 3.5)
+                .background(Capsule().fill(Color.black.opacity(0.25)))
+                .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1))
             }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 3.5)
-            .background(Capsule().fill(Color.black.opacity(0.35)))
-            .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1))
         }
         .font(.system(size: 11))
     }
