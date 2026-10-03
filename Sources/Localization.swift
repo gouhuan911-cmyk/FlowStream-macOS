@@ -144,6 +144,14 @@ public struct L10n {
             return lang == .zh ? "正在解密音乐..." : "Decrypting..."
         case .directCopy:
             return lang == .zh ? "无损直拷" : "Direct Copy"
+        case .searchHistoryPlaceholder:
+            return lang == .zh ? "搜索已下载或已转换的媒体历史..." : "Search downloaded or converted media history..."
+        case .convertInputPlaceholder:
+            return lang == .zh ? "拖入待转换的视频、音频或加密音乐 (NCM/MFLAC)，或点击浏览..." : "Drop videos, audio, or encrypted music (NCM/MFLAC) here, or browse..."
+        case .startAllTranscode:
+            return lang == .zh ? "⚡️ 开始全部转换" : "⚡️ Start All"
+        case .stopTranscode:
+            return lang == .zh ? "⏹️ 停止转换" : "⏹️ Stop"
         }
     }
     
@@ -161,6 +169,7 @@ public struct L10n {
         case tabConvert, smartInputPlaceholder, smartActionBtn, startTranscode, hardwareAcceleration
         case quickPresetsTitle, morePresets, oneClickConvert, selectFiles
         case emptyConvertTitle, emptyConvertSubtitle, convertSettings, transcoding, analyzing, decrypting, directCopy
+        case searchHistoryPlaceholder, convertInputPlaceholder, startAllTranscode, stopTranscode
     }
 }
 

@@ -17,20 +17,24 @@ public struct ContentView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // 1. 沉浸式顶部栏（交通灯、居中双舱/三舱切换药丸、右侧设置三件套与环境指示）
+                // 1. 沉浸式顶部栏（交通灯安全边距、居中发光三舱切换药丸、右侧设置三件套与环境指示）
                 HeaderBarView(viewModel: viewModel)
                 
-                // 2. 方案二核心：智能万能一体流输入区 + 常用预设胶囊横条 + 快捷行动栏
+                // 2. 方案 A 核心结构：智能万能一体流输入区 + 6大预设卡片面板 (转换模式展现) + 快捷行动栏 (硬件加速开关)
                 VStack(spacing: 10) {
                     UniversalInputBarView(viewModel: viewModel, isInputFocused: _isInputFocused)
-                    PresetPillsStripView(viewModel: viewModel)
+                    
+                    if viewModel.currentTab == .convert {
+                        PresetCardsPanelView(viewModel: viewModel)
+                    }
+                    
                     SubActionBarView(viewModel: viewModel)
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 12)
                 .padding(.bottom, 10)
                 
-                Divider().opacity(0.15)
+                Divider().opacity(0.12)
                 
                 // 3. 主体工作区（根据顶栏分段器展示：下载舱 / 转换舱 / 媒体历史库）
                 ZStack {
@@ -89,7 +93,7 @@ struct HeaderBarView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            Spacer().frame(width: 68) // 交通灯安全边距
+            Spacer().frame(width: 72) // 交通灯安全边距
             
             // 品牌 Logo 与标题
             HStack(spacing: 8) {
@@ -112,21 +116,40 @@ struct HeaderBarView: View {
             
             Spacer()
             
-            // 居中发光分段切换药丸 (网络下载 / 万能转换 / 媒体历史)
-            Picker("", selection: $viewModel.currentTab) {
-                Text("\(L10n.text(.tabQueue, lang: viewModel.language)) (\(viewModel.queueTasks.count))")
-                    .tag(MainTab.queue)
-                Text("\(L10n.text(.tabConvert, lang: viewModel.language)) (\(viewModel.convertJobs.count))")
-                    .tag(MainTab.convert)
-                Text("\(L10n.text(.tabHistory, lang: viewModel.language)) (\(viewModel.historyItems.count))")
-                    .tag(MainTab.history)
+            // 居中发光三舱切换药丸 (网络下载 / 万能转换 / 媒体历史) - 方案 A 专属流光样式
+            HStack(spacing: 2) {
+                tabButton(
+                    tab: .queue,
+                    title: viewModel.language == .zh ? "网络下载" : "Queue",
+                    icon: "arrow.down.to.line",
+                    count: viewModel.queueTasks.count
+                )
+                tabButton(
+                    tab: .convert,
+                    title: viewModel.language == .zh ? "万能转换" : "Convert",
+                    icon: "arrow.triangle.2.circlepath",
+                    count: viewModel.convertJobs.count
+                )
+                tabButton(
+                    tab: .history,
+                    title: viewModel.language == .zh ? "媒体历史" : "History",
+                    icon: "clock.arrow.circlepath",
+                    count: viewModel.historyItems.count
+                )
             }
-            .pickerStyle(.segmented)
-            .frame(width: 360)
+            .padding(3)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.black.opacity(0.35))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            )
             
             Spacer()
             
-            // 外观模式菜单 (白天 / 黑夜 / 系统)
+            // 外观模式菜单 (黑夜 / 白天 / 系统)
             Menu {
                 ForEach(AppearanceMode.allCases) { mode in
                     Button {
@@ -146,29 +169,19 @@ struct HeaderBarView: View {
                     Image(systemName: viewModel.appearanceMode.icon)
                         .font(.system(size: 11))
                     Text(viewModel.appearanceMode.displayName(lang: viewModel.language))
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 11, weight: .medium))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
                 }
                 .foregroundColor(.primary)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
-                .background(Capsule().fill(.quaternary))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4.5)
+                .background(Capsule().fill(Color.white.opacity(0.08)))
+                .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.8))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            
-            // 偏好设置
-            Button {
-                viewModel.isSettingsPresented = true
-            } label: {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(.primary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(.quaternary))
-            }
-            .buttonStyle(.plain)
-            .help(L10n.text(.settings, lang: viewModel.language))
             
             // 中英文即时切换
             Button {
@@ -179,25 +192,38 @@ struct HeaderBarView: View {
                 HStack(spacing: 3) {
                     Image(systemName: "globe")
                         .font(.system(size: 11))
-                    Text(viewModel.language == .zh ? "EN" : "中")
+                    Text(viewModel.language == .zh ? "中/EN" : "EN/中")
                         .font(.system(size: 11, weight: .bold))
                 }
                 .foregroundColor(.primary)
                 .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Capsule().fill(.quaternary))
+                .padding(.vertical, 4.5)
+                .background(Capsule().fill(Color.white.opacity(0.08)))
+                .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.8))
             }
             .buttonStyle(.plain)
             
+            // 偏好设置
+            Button {
+                viewModel.isSettingsPresented = true
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 12))
+                    .foregroundColor(.primary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4.5)
+                    .background(Capsule().fill(Color.white.opacity(0.08)))
+                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.8))
+            }
+            .buttonStyle(.plain)
+            .help(L10n.text(.settings, lang: viewModel.language))
+            
             // VideoToolbox 硬件加速或环境状态灯
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 Circle()
                     .fill(viewModel.ffmpegReport.hasVideoToolbox ? Color.green : Color.orange)
-                    .frame(width: 7, height: 7)
-                    .shadow(color: viewModel.ffmpegReport.hasVideoToolbox ? .green.opacity(0.6) : .clear, radius: 4)
-                Text(viewModel.ffmpegReport.hasVideoToolbox ? "⚡️ VideoToolbox" : L10n.text(.envOk, lang: viewModel.language))
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(viewModel.ffmpegReport.hasVideoToolbox ? .green : .secondary)
+                    .frame(width: 6.5, height: 6.5)
+                    .shadow(color: viewModel.ffmpegReport.hasVideoToolbox ? .green.opacity(0.7) : .clear, radius: 4)
             }
             .padding(.trailing, 16)
         }
@@ -205,9 +231,52 @@ struct HeaderBarView: View {
         .background(.ultraThinMaterial.opacity(0.85))
         .overlay(Divider().opacity(0.15), alignment: .bottom)
     }
+    
+    private func tabButton(tab: MainTab, title: String, icon: String, count: Int) -> some View {
+        let isSelected = viewModel.currentTab == tab
+        return Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                viewModel.currentTab = tab
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 12, weight: isSelected ? .bold : .medium))
+                if count > 0 {
+                    Text("(\(count))")
+                        .font(.system(size: 10, weight: .bold))
+                }
+            }
+            .foregroundColor(isSelected ? .white : .secondary)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 5.5)
+            .background(
+                Group {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.white.opacity(0.08))
+                    } else {
+                        Color.clear
+                    }
+                }
+            )
+            .overlay(
+                Group {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color(red: 0.1, green: 0.9, blue: 0.95), lineWidth: 1.5)
+                            .shadow(color: Color(red: 0.1, green: 0.9, blue: 0.95).opacity(0.8), radius: 6)
+                    }
+                }
+            )
+        }
+        .buttonStyle(.plain)
+    }
 }
 
-// MARK: - 2. 方案二智能万能输入条 (UniversalInputBarView)
+// MARK: - 2. 方案 A 智能万能输入条 (UniversalInputBarView)
 struct UniversalInputBarView: View {
     @ObservedObject var viewModel: DownloadViewModel
     @FocusState var isInputFocused: Bool
@@ -215,187 +284,375 @@ struct UniversalInputBarView: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             HStack(alignment: .center, spacing: 10) {
-                Image(systemName: viewModel.isClipboardAutoFilled ? "doc.on.clipboard.fill" : "link.badge.plus")
-                    .foregroundColor(viewModel.isClipboardAutoFilled ? .cyan : .secondary)
-                    .font(.system(size: 14))
-                
-                TextField(
-                    L10n.text(.smartInputPlaceholder, lang: viewModel.language),
-                    text: $viewModel.urlInput,
-                    axis: .vertical
-                )
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .lineLimit(1...3)
-                .focused($isInputFocused)
-                .onSubmit {
-                    if !viewModel.urlInput.isEmpty {
-                        viewModel.smartHandleInput()
+                if viewModel.currentTab == .history {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 14))
+                    
+                    TextField(
+                        L10n.text(.searchHistoryPlaceholder, lang: viewModel.language),
+                        text: $viewModel.historySearchText
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .focused($isInputFocused)
+                    
+                    if !viewModel.historySearchText.isEmpty {
+                        Button {
+                            viewModel.historySearchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 13))
+                        }
+                        .buttonStyle(.plain)
                     }
-                }
-                
-                if !viewModel.urlInput.isEmpty {
+                } else {
+                    Image(systemName: viewModel.isClipboardAutoFilled ? "doc.on.clipboard.fill" : (viewModel.currentTab == .convert ? "folder.badge.plus" : "link.badge.plus"))
+                        .foregroundColor(viewModel.isClipboardAutoFilled ? .cyan : .secondary)
+                        .font(.system(size: 14))
+                    
+                    TextField(
+                        inputPlaceholder,
+                        text: $viewModel.urlInput,
+                        axis: .vertical
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .lineLimit(1...3)
+                    .focused($isInputFocused)
+                    .onSubmit {
+                        if !viewModel.urlInput.isEmpty {
+                            viewModel.smartHandleInput()
+                        }
+                    }
+                    
+                    if !viewModel.urlInput.isEmpty {
+                        Button {
+                            viewModel.urlInput = ""
+                            viewModel.isClipboardAutoFilled = false
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 13))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    // 本地媒体文件选择按钮
                     Button {
-                        viewModel.urlInput = ""
-                        viewModel.isClipboardAutoFilled = false
+                        viewModel.selectLocalFilesForConvert()
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                            .font(.system(size: 13))
+                        HStack(spacing: 4) {
+                            Image(systemName: "folder.badge.plus")
+                                .font(.system(size: 12))
+                            Text(L10n.text(.selectFiles, lang: viewModel.language))
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
                     }
                     .buttonStyle(.plain)
+                    .help("浏览本地视频、音频或加密音乐 (NCM/MFLAC)")
                 }
-                
-                // 本地媒体文件选择按钮
-                Button {
-                    viewModel.selectLocalFilesForConvert()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "folder.badge.plus")
-                            .font(.system(size: 12))
-                        Text(L10n.text(.selectFiles, lang: viewModel.language))
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
-                }
-                .buttonStyle(.plain)
-                .help("浏览本地视频、音频或加密音乐")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 11)
-                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.75))
+                    .fill(Color.black.opacity(0.32))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 11)
                     .stroke(
                         isInputFocused
-                            ? LinearGradient(colors: [.cyan.opacity(0.8), .blue.opacity(0.8)], startPoint: .leading, endPoint: .trailing)
-                            : LinearGradient(colors: [Color.white.opacity(0.12), Color.white.opacity(0.04)], startPoint: .top, endPoint: .bottom),
+                            ? LinearGradient(colors: [.cyan.opacity(0.85), .blue.opacity(0.85)], startPoint: .leading, endPoint: .trailing)
+                            : LinearGradient(colors: [Color.white.opacity(0.12), Color.white.opacity(0.06)], startPoint: .top, endPoint: .bottom),
                         lineWidth: isInputFocused ? 1.5 : 1
                     )
             )
             
-            // 亮青色行动大按钮 (智能解析 / 转换)
-            Button {
-                viewModel.smartHandleInput()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 13, weight: .bold))
-                    Text(L10n.text(.smartActionBtn, lang: viewModel.language))
-                        .font(.system(size: 12, weight: .bold))
-                }
-                .foregroundColor(.black)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 9)
-                .background(
-                    LinearGradient(
-                        colors: [Color(red: 0.1, green: 0.9, blue: 0.95), Color(red: 0.05, green: 0.75, blue: 0.9)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+            // 亮青色行动大按钮 (智能解析 / 转换 / 下载)
+            if viewModel.currentTab != .history {
+                Button {
+                    viewModel.smartHandleInput()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 13, weight: .bold))
+                        Text(actionButtonTitle)
+                            .font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .background(
+                        LinearGradient(
+                            colors: [Color(red: 0.1, green: 0.9, blue: 0.95), Color(red: 0.05, green: 0.75, blue: 0.9)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .shadow(color: Color.cyan.opacity(0.35), radius: 5, x: 0, y: 2)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .shadow(color: Color.cyan.opacity(0.35), radius: 5, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
+    }
+    
+    private var inputPlaceholder: String {
+        if viewModel.currentTab == .convert {
+            return L10n.text(.convertInputPlaceholder, lang: viewModel.language)
+        }
+        return L10n.text(.inputPlaceholder, lang: viewModel.language)
+    }
+    
+    private var actionButtonTitle: String {
+        if viewModel.currentTab == .convert {
+            return viewModel.language == .zh ? "智能解析 / 转码" : "Smart Transcode"
+        }
+        return viewModel.language == .zh ? "智能解析 / 下载" : "Smart Download"
     }
 }
 
-// MARK: - 3. 28大预设快捷药丸横条 (PresetPillsStripView)
-struct PresetPillsStripView: View {
+// MARK: - 3. 方案 A 专属：6大高频预设卡片面板 (PresetCardsPanelView)
+struct PresetCardsPanelView: View {
     @ObservedObject var viewModel: DownloadViewModel
     
     var body: some View {
         HStack(spacing: 8) {
-            Label(L10n.text(.quickPresetsTitle, lang: viewModel.language), systemImage: "slider.horizontal.3")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
+            // 6 大核心高频预设卡片 (完全还原 Scheme A 样式)
+            presetCard(
+                title: "MP4 (H.264)",
+                presetId: viewModel.useHardwareAcceleration ? "mp4-h264-hw" : "mp4-h264",
+                iconType: .mp4
+            )
             
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(viewModel.quickPresets) { preset in
-                        let isSelected = viewModel.activePreset.id == preset.id
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                viewModel.selectPreset(preset)
-                            }
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: preset.symbol)
-                                    .font(.system(size: 10))
-                                Text(preset.name)
-                                    .font(.system(size: 11, weight: isSelected ? .bold : .medium))
-                            }
-                            .foregroundColor(isSelected ? .white : .primary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(
-                                Group {
-                                    if isSelected {
-                                        LinearGradient(colors: [.cyan.opacity(0.85), .blue.opacity(0.85)], startPoint: .leading, endPoint: .trailing)
-                                    } else {
-                                        LinearGradient(colors: [Color.white.opacity(0.08), Color.white.opacity(0.03)], startPoint: .top, endPoint: .bottom)
-                                    }
-                                }
-                            )
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .stroke(isSelected ? Color.cyan : Color.white.opacity(0.12), lineWidth: 1)
-                            )
-                            .shadow(color: isSelected ? Color.cyan.opacity(0.3) : .clear, radius: 4)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    
-                    // 更多 28 大预设下拉菜单
-                    Menu {
-                        Section("🎬 视频常用格式") {
-                            ForEach(PresetLibrary.presets(in: .video)) { p in
-                                Button(p.name) {
-                                    viewModel.selectPreset(p)
-                                }
-                            }
-                        }
-                        Section("🎵 音频提取与无损") {
-                            ForEach(PresetLibrary.presets(in: .audio)) { p in
-                                Button(p.name) {
-                                    viewModel.selectPreset(p)
-                                }
-                            }
-                        }
-                        Section("🖼️ 动图") {
-                            ForEach(PresetLibrary.presets(in: .animation)) { p in
-                                Button(p.name) {
-                                    viewModel.selectPreset(p)
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(L10n.text(.morePresets, lang: viewModel.language))
-                                .font(.system(size: 11, weight: .medium))
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 9))
-                        }
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(Capsule().fill(.quaternary))
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                }
-                .padding(.vertical, 2)
-            }
+            presetCard(
+                title: "4K HEVC",
+                presetId: viewModel.useHardwareAcceleration ? "mp4-hevc-hw" : "mp4-hevc",
+                iconType: .hevc4k
+            )
+            
+            presetCard(
+                title: "ProRes 422",
+                presetId: "mov-prores",
+                iconType: .prores
+            )
+            
+            presetCard(
+                title: "GIF",
+                presetId: "gif",
+                iconType: .gif
+            )
+            
+            presetCard(
+                title: "320K MP3",
+                presetId: "audio-mp3",
+                iconType: .mp3
+            )
+            
+            presetCard(
+                title: "NCM音乐解锁",
+                presetId: "audio-flac",
+                iconType: .ncm
+            )
+            
+            // 更多 28 大预设下拉菜单
+            morePresetsMenu
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.black.opacity(0.32))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+    
+    enum CardIconType {
+        case mp4, hevc4k, prores, gif, mp3, ncm
+    }
+    
+    private func isCardSelected(type: CardIconType) -> Bool {
+        let activeId = viewModel.activePreset.id
+        switch type {
+        case .mp4:
+            return activeId == "mp4-h264" || activeId == "mp4-h264-hw"
+        case .hevc4k:
+            return activeId == "mp4-hevc" || activeId == "mp4-hevc-hw"
+        case .prores:
+            return activeId == "mov-prores"
+        case .gif:
+            return activeId == "gif"
+        case .mp3:
+            return activeId == "audio-mp3"
+        case .ncm:
+            return activeId == "audio-flac"
+        }
+    }
+    
+    private func presetCard(title: String, presetId: String, iconType: CardIconType) -> some View {
+        let isSelected = isCardSelected(type: iconType)
+        return Button {
+            if let p = PresetLibrary.preset(id: presetId) {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    viewModel.selectPreset(p)
+                }
+            }
+        } label: {
+            VStack(spacing: 6) {
+                iconView(for: iconType)
+                    .frame(height: 28)
+                
+                Text(title)
+                    .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                    .foregroundColor(isSelected ? .white : Color.white.opacity(0.72))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 66)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? Color.white.opacity(0.14) : Color.white.opacity(0.02))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? Color.white.opacity(0.38) : Color.white.opacity(0.06), lineWidth: isSelected ? 1.2 : 1)
+            )
+            .shadow(color: isSelected ? Color.black.opacity(0.25) : .clear, radius: 4)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    @ViewBuilder
+    private func iconView(for type: CardIconType) -> some View {
+        switch type {
+        case .mp4:
+            ZStack {
+                RoundedRectangle(cornerRadius: 3.5)
+                    .stroke(Color.white.opacity(0.85), lineWidth: 1.2)
+                    .frame(width: 24, height: 26)
+                Text("MP4")
+                    .font(.system(size: 8, weight: .black, design: .rounded))
+                    .foregroundColor(.white)
+            }
+        case .hevc4k:
+            ZStack {
+                RoundedRectangle(cornerRadius: 3.5)
+                    .stroke(Color.white.opacity(0.85), lineWidth: 1.2)
+                    .frame(width: 27, height: 26)
+                VStack(spacing: 0.5) {
+                    Text("4K")
+                        .font(.system(size: 9, weight: .black, design: .rounded))
+                    Text("HEVC")
+                        .font(.system(size: 6.5, weight: .bold))
+                }
+                .foregroundColor(.white)
+            }
+        case .prores:
+            ZStack {
+                RoundedRectangle(cornerRadius: 3.5)
+                    .stroke(Color.white.opacity(0.85), lineWidth: 1.2)
+                    .frame(width: 38, height: 22)
+                Text("ProRes 422")
+                    .font(.system(size: 6.8, weight: .bold))
+                    .foregroundColor(.white)
+            }
+        case .gif:
+            ZStack {
+                RoundedRectangle(cornerRadius: 3.5)
+                    .stroke(Color.white.opacity(0.85), lineWidth: 1.2)
+                    .frame(width: 26, height: 26)
+                Text("GIF")
+                    .font(.system(size: 9, weight: .black, design: .rounded))
+                    .foregroundColor(.white)
+            }
+        case .mp3:
+            ZStack {
+                RoundedRectangle(cornerRadius: 3.5)
+                    .stroke(Color.white.opacity(0.85), lineWidth: 1.2)
+                    .frame(width: 24, height: 26)
+                VStack(spacing: 1) {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 8.5, weight: .bold))
+                    Text("MP3")
+                        .font(.system(size: 6.5, weight: .heavy))
+                }
+                .foregroundColor(.white)
+            }
+        case .ncm:
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: "opticaldisc.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.white.opacity(0.9))
+                Image(systemName: "music.note")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundColor(.cyan)
+                    .offset(x: 2, y: 2)
+            }
+            .frame(height: 26)
+        }
+    }
+    
+    private var isNonStandardSelected: Bool {
+        let id = viewModel.activePreset.id
+        return !["mp4-h264", "mp4-h264-hw", "mp4-hevc", "mp4-hevc-hw", "mov-prores", "gif", "audio-mp3", "audio-flac"].contains(id)
+    }
+    
+    private var morePresetsMenu: some View {
+        Menu {
+            Section("🎬 视频常用格式") {
+                ForEach(PresetLibrary.presets(in: .video)) { p in
+                    Button(p.name) {
+                        viewModel.selectPreset(p)
+                    }
+                }
+            }
+            Section("🎵 音频提取与无损") {
+                ForEach(PresetLibrary.presets(in: .audio)) { p in
+                    Button(p.name) {
+                        viewModel.selectPreset(p)
+                    }
+                }
+            }
+            Section("🖼️ 动图") {
+                ForEach(PresetLibrary.presets(in: .animation)) { p in
+                    Button(p.name) {
+                        viewModel.selectPreset(p)
+                    }
+                }
+            }
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 16))
+                HStack(spacing: 2) {
+                    Text(isNonStandardSelected ? viewModel.activePreset.name : L10n.text(.morePresets, lang: viewModel.language))
+                        .font(.system(size: 10, weight: .medium))
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 7))
+                }
+            }
+            .foregroundColor(isNonStandardSelected ? .cyan : Color.white.opacity(0.72))
+            .frame(width: 74, height: 66)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isNonStandardSelected ? Color.cyan.opacity(0.14) : Color.white.opacity(0.02))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isNonStandardSelected ? Color.cyan.opacity(0.4) : Color.white.opacity(0.06), lineWidth: 1)
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 }
 
@@ -404,33 +661,7 @@ struct SubActionBarView: View {
     @ObservedObject var viewModel: DownloadViewModel
     
     var body: some View {
-        HStack(spacing: 14) {
-            // VideoToolbox 硬件加速开关药丸
-            Button {
-                viewModel.useHardwareAcceleration.toggle()
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: viewModel.useHardwareAcceleration ? "bolt.fill" : "bolt.slash")
-                        .foregroundColor(viewModel.useHardwareAcceleration ? .green : .secondary)
-                        .font(.system(size: 11))
-                    Text(L10n.text(.hardwareAcceleration, lang: viewModel.language))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(viewModel.useHardwareAcceleration ? .primary : .secondary)
-                }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(viewModel.useHardwareAcceleration ? Color.green.opacity(0.12) : Color.white.opacity(0.04))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(viewModel.useHardwareAcceleration ? Color.green.opacity(0.3) : Color.white.opacity(0.08), lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-            .help("利用 Apple Silicon M系列芯片内置媒体引擎，转码速度快 6 倍")
-            
+        HStack(spacing: 12) {
             // 保存位置指示
             HStack(spacing: 4) {
                 Text(L10n.text(.saveLocation, lang: viewModel.language))
@@ -458,7 +689,7 @@ struct SubActionBarView: View {
             
             Spacer()
             
-            // 右侧舱段专属操作按钮组
+            // 中间舱位专属操作按钮组
             if viewModel.currentTab == .queue {
                 queueControls
             } else if viewModel.currentTab == .convert {
@@ -466,6 +697,25 @@ struct SubActionBarView: View {
             } else {
                 historyControls
             }
+            
+            // 右侧 VideoToolbox 硬件加速开关药丸 (效果图方案 A 标配)
+            HStack(spacing: 7) {
+                Image(systemName: "bolt.fill")
+                    .foregroundColor(viewModel.useHardwareAcceleration ? .yellow : .secondary)
+                    .font(.system(size: 11))
+                Text(viewModel.language == .zh ? "VideoToolbox 硬件加速" : "VideoToolbox Turbo")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundColor(viewModel.useHardwareAcceleration ? .primary : .secondary)
+                Toggle("", isOn: $viewModel.useHardwareAcceleration)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .tint(Color(red: 0.1, green: 0.85, blue: 0.85))
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 3.5)
+            .background(Capsule().fill(Color.black.opacity(0.35)))
+            .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1))
         }
         .font(.system(size: 11))
     }
@@ -531,7 +781,7 @@ struct SubActionBarView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "stop.fill").font(.system(size: 9))
-                        Text("⏹️ 停止转换")
+                        Text(L10n.text(.stopTranscode, lang: viewModel.language))
                             .font(.system(size: 11, weight: .bold))
                     }
                     .foregroundColor(.white)
@@ -547,7 +797,7 @@ struct SubActionBarView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "bolt.fill").font(.system(size: 9))
-                        Text("⚡️ 开始全部转换 (\(runnableCount))")
+                        Text("\(L10n.text(.startAllTranscode, lang: viewModel.language)) (\(runnableCount))")
                             .font(.system(size: 11, weight: .bold))
                     }
                     .foregroundColor(.black)
@@ -572,14 +822,20 @@ struct SubActionBarView: View {
     }
     
     private var historyControls: some View {
-        Button {
-            viewModel.clearAllHistory()
-        } label: {
-            Text(L10n.text(.clearHistory, lang: viewModel.language))
+        HStack(spacing: 10) {
+            Text("共 \(viewModel.filteredHistoryItems.count) 条记录")
                 .foregroundColor(.secondary)
                 .font(.system(size: 11))
+            
+            Button {
+                viewModel.clearAllHistory()
+            } label: {
+                Text(L10n.text(.clearHistory, lang: viewModel.language))
+                    .foregroundColor(.secondary)
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -692,15 +948,15 @@ struct HistoryDeckView: View {
     
     var body: some View {
         Group {
-            if viewModel.historyItems.isEmpty {
+            if viewModel.filteredHistoryItems.isEmpty {
                 VStack(spacing: 14) {
                     Spacer()
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.system(size: 44, weight: .light))
                         .foregroundColor(.secondary.opacity(0.6))
-                    Text(L10n.text(.emptyHistoryTitle, lang: viewModel.language))
+                    Text(viewModel.historyItems.isEmpty ? L10n.text(.emptyHistoryTitle, lang: viewModel.language) : "未找到匹配的历史记录")
                         .font(.system(size: 15, weight: .medium))
-                    Text(L10n.text(.emptyHistorySubtitle, lang: viewModel.language))
+                    Text(viewModel.historyItems.isEmpty ? L10n.text(.emptyHistorySubtitle, lang: viewModel.language) : "请尝试更改搜索关键字")
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
                     Spacer()
@@ -708,7 +964,7 @@ struct HistoryDeckView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 10) {
-                        ForEach(viewModel.historyItems) { item in
+                        ForEach(viewModel.filteredHistoryItems) { item in
                             HistoryItemCardView(viewModel: viewModel, item: item)
                         }
                     }
@@ -717,6 +973,37 @@ struct HistoryDeckView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - 发光青色霓虹进度条 (GlowingProgressBar)
+struct GlowingProgressBar: View {
+    var progress: Double
+    var height: CGFloat = 3.5
+    
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(height: height)
+                
+                let fillWidth = max(0, min(geo.size.width, geo.size.width * CGFloat(progress)))
+                if fillWidth > 0 {
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(red: 0.1, green: 0.92, blue: 0.98), Color(red: 0.0, green: 0.78, blue: 0.92)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: fillWidth, height: height)
+                        .shadow(color: Color(red: 0.1, green: 0.9, blue: 0.95).opacity(0.85), radius: 5, x: 0, y: 0)
+                }
+            }
+        }
+        .frame(height: height)
     }
 }
 
@@ -784,14 +1071,12 @@ struct DownloadTaskCardView: View {
                     statusBadge
                 }
                 
-                // 进度条
+                // 发光细青色进度条
                 if case .downloading = item.status {
-                    VStack(spacing: 3) {
-                        ProgressView(value: item.progress)
-                            .progressViewStyle(.linear)
-                            .tint(.cyan)
+                    VStack(spacing: 4) {
+                        GlowingProgressBar(progress: item.progress, height: 3.5)
                         HStack {
-                            Text("\(Int(item.progress * 100))%").font(.system(size: 10)).foregroundColor(.cyan)
+                            Text("\(Int(item.progress * 100))%").font(.system(size: 10, weight: .bold)).foregroundColor(.cyan)
                             Spacer()
                             Text("\(item.speed) · ETA \(item.eta)").font(.system(size: 10)).foregroundColor(.secondary)
                         }
@@ -931,68 +1216,89 @@ struct DownloadTaskCardView: View {
     }
 }
 
-// MARK: - 9. 单个转换任务卡片 (TranscodeJobCardView)
+// MARK: - 9. 方案 A 转换任务卡片 (TranscodeJobCardView)
 struct TranscodeJobCardView: View {
     @ObservedObject var viewModel: DownloadViewModel
     @ObservedObject var job: TranscodeJob
     
     var body: some View {
-        HStack(spacing: 14) {
-            // 格式大图标胶囊
-            ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.cyan.opacity(0.12))
-                    .frame(width: 58, height: 58)
+        VStack(spacing: 7) {
+            // 顶行：左侧格式小标 + 文件名流向 + 右侧实时状态/FPS/解密徽章 + 删除按钮
+            HStack(spacing: 10) {
+                // 左侧格式徽标小图标 (如效果图中的 MOV / CD / MKV)
+                leadingFormatIcon
                 
-                VStack(spacing: 2) {
-                    Image(systemName: job.isEncryptedSource ? "lock.open.fill" : job.preset.symbol)
-                        .font(.system(size: 18))
-                        .foregroundColor(.cyan)
-                    Text(job.sourceFormatLabel)
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.cyan)
-                }
-            }
-            
-            // 任务详情与规格
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 8) {
+                // 文件名 ➔ 目标格式
+                HStack(spacing: 6) {
                     Text(job.fileName)
                         .font(.system(size: 13, weight: .bold))
                         .lineLimit(1)
                         .foregroundColor(.primary)
                     
-                    Spacer()
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.secondary)
                     
-                    // 硬件加速标签或直拷标签
-                    if job.isDirectCopy {
-                        Text("🚀 无损直拷 (0.1s)")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.green)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(Color.green.opacity(0.12)))
-                    } else if job.isHardwareAccelerated {
-                        Text("⚡️ VideoToolbox 硬编")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.cyan)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(Color.cyan.opacity(0.12)))
-                    }
-                    
-                    // 目标预设徽标
-                    HStack(spacing: 3) {
-                        Image(systemName: "arrow.right").font(.system(size: 9))
-                        Text(job.preset.name).font(.system(size: 10, weight: .bold))
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(LinearGradient(colors: [.cyan.opacity(0.8), .blue.opacity(0.8)], startPoint: .leading, endPoint: .trailing)))
+                    Text(job.targetSummary)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundColor(Color.cyan)
+                        .lineLimit(1)
                 }
                 
+                Spacer()
+                
+                // 右侧指标与状态
+                trailingStatusAndMetrics
+                
+                // 移除/取消按钮
+                Button {
+                    viewModel.removeConvertJob(job: job)
+                } label: {
+                    Image(systemName: "xmark.circle")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 13))
+                }
+                .buttonStyle(.plain)
+            }
+            
+            // 发光细青色进度条线 (贯穿卡片宽度，如效果图)
+            GlowingProgressBar(progress: job.state == .completed ? 1.0 : job.progress)
+            
+            // 底部辅助信息条 (分辨率、时长、直拷说明、完成后的预览与定位)
+            if job.state == .completed, let outURL = job.outputURL {
                 HStack(spacing: 12) {
+                    Text(job.durationLabel).font(.system(size: 11)).foregroundColor(.secondary)
+                    Spacer()
+                    Button {
+                        viewModel.previewItem(fileURL: outURL)
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "eye.fill").font(.system(size: 10))
+                            Text(L10n.text(.quickLookPreview, lang: viewModel.language)).font(.system(size: 11))
+                        }
+                        .foregroundColor(.primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(.quaternary))
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        viewModel.revealInFinder(fileURL: outURL)
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "folder").font(.system(size: 10))
+                            Text(L10n.text(.revealInFinder, lang: viewModel.language)).font(.system(size: 11))
+                        }
+                        .foregroundColor(.primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(.quaternary))
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else if job.state == .ready || job.state == .pending {
+                HStack(spacing: 10) {
                     if !job.resolutionLabel.isEmpty {
                         Text(job.resolutionLabel).font(.system(size: 11)).foregroundColor(.secondary)
                     }
@@ -1002,132 +1308,132 @@ struct TranscodeJobCardView: View {
                     if let strategy = job.plan?.humanReadable, !strategy.isEmpty {
                         Text(strategy).font(.system(size: 11)).foregroundColor(.secondary)
                     }
-                    
                     Spacer()
-                    
-                    // 状态说明或 FPS
-                    if job.state == .running {
-                        HStack(spacing: 6) {
-                            if job.fps > 0 {
-                                Text("\(Int(job.fps)) FPS").font(.system(size: 11, weight: .bold)).foregroundColor(.cyan)
-                            }
-                            if !job.speedText.isEmpty {
-                                Text(job.speedText).font(.system(size: 11)).foregroundColor(.secondary)
-                            }
-                        }
-                    } else {
-                        jobStateBadge
-                    }
-                }
-                
-                // 进度条
-                if job.state == .running || job.state == .decrypting {
-                    VStack(spacing: 3) {
-                        ProgressView(value: job.progress)
-                            .progressViewStyle(.linear)
-                            .tint(.cyan)
-                        HStack {
-                            Text(job.state == .decrypting ? "解密中 \(job.formattedProgress)" : "转码中 \(job.formattedProgress)")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(.cyan)
-                            Spacer()
-                        }
-                    }
-                }
-                
-                // 操作栏
-                HStack(spacing: 8) {
-                    if job.state == .ready || job.state == .pending {
-                        Button {
-                            viewModel.startConverting()
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "play.fill").font(.system(size: 9))
-                                Text(L10n.text(.startTranscode, lang: viewModel.language))
-                                    .font(.system(size: 11, weight: .bold))
-                            }
-                            .foregroundColor(.black)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 4)
-                            .background(LinearGradient(colors: [.cyan, .blue], startPoint: .leading, endPoint: .trailing))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    
-                    if job.state == .completed, let outURL = job.outputURL {
-                        Button {
-                            viewModel.previewItem(fileURL: outURL)
-                        } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: "eye.fill").font(.system(size: 10))
-                                Text(L10n.text(.quickLookPreview, lang: viewModel.language)).font(.system(size: 11))
-                            }
-                            .foregroundColor(.primary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Capsule().fill(.quaternary))
-                        }
-                        .buttonStyle(.plain)
-                        
-                        Button {
-                            viewModel.revealInFinder(fileURL: outURL)
-                        } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: "folder").font(.system(size: 10))
-                                Text(L10n.text(.revealInFinder, lang: viewModel.language)).font(.system(size: 11))
-                            }
-                            .foregroundColor(.primary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Capsule().fill(.quaternary))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    
-                    Spacer()
-                    
                     Button {
-                        viewModel.removeConvertJob(job: job)
+                        viewModel.startConverting()
                     } label: {
-                        Image(systemName: "xmark.circle")
-                            .foregroundColor(.secondary)
-                            .font(.system(size: 13))
+                        HStack(spacing: 4) {
+                            Image(systemName: "play.fill").font(.system(size: 9))
+                            Text(L10n.text(.startTranscode, lang: viewModel.language))
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .foregroundColor(.black)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 3.5)
+                        .background(LinearGradient(colors: [.cyan, .blue], startPoint: .leading, endPoint: .trailing))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
-        .padding(12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+            RoundedRectangle(cornerRadius: 11)
+                .fill(Color.black.opacity(0.28))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 11)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
     }
     
     @ViewBuilder
-    private var jobStateBadge: some View {
-        switch job.state {
-        case .pending:
-            Text("等待中").font(.system(size: 11)).foregroundColor(.orange)
-        case .decrypting:
-            Text("离线解密中...").font(.system(size: 11)).foregroundColor(.purple)
-        case .analyzing:
-            Text("探测分析中...").font(.system(size: 11)).foregroundColor(.cyan)
-        case .ready:
-            Text("已就绪").font(.system(size: 11, weight: .semibold)).foregroundColor(.green)
-        case .running:
-            Text("正在极速转码...").font(.system(size: 11, weight: .bold)).foregroundColor(.cyan)
-        case .completed:
-            Text("转换完成").font(.system(size: 11, weight: .bold)).foregroundColor(.green)
-        case .failed:
-            Text(job.errorMessage ?? "转换失败").font(.system(size: 10)).foregroundColor(.red).lineLimit(1)
-        case .cancelled:
-            Text("已取消").font(.system(size: 11)).foregroundColor(.secondary)
+    private var leadingFormatIcon: some View {
+        if job.isEncryptedSource {
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: "opticaldisc.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.white.opacity(0.85))
+                Image(systemName: "music.note")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.cyan)
+                    .offset(x: 2, y: 2)
+            }
+            .frame(width: 26, height: 26)
+        } else if job.mediaInfo?.video == nil && job.mediaInfo?.audio != nil {
+            Image(systemName: "music.note")
+                .font(.system(size: 18))
+                .foregroundColor(.cyan)
+                .frame(width: 26, height: 26)
+        } else {
+            // 视频文档标签 (MOV, MKV, MP4 等)
+            ZStack {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.white.opacity(0.08))
+                    .frame(width: 26, height: 26)
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                    .frame(width: 26, height: 26)
+                
+                VStack(spacing: 0) {
+                    Image(systemName: "film")
+                        .font(.system(size: 9))
+                        .foregroundColor(.white.opacity(0.8))
+                    Text(job.sourceFormatLabel.prefix(4))
+                        .font(.system(size: 7, weight: .heavy))
+                        .foregroundColor(.cyan)
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var trailingStatusAndMetrics: some View {
+        if job.state == .running {
+            HStack(spacing: 6) {
+                Text("\(Int(job.progress * 100))%").font(.system(size: 11, weight: .bold)).foregroundColor(.cyan)
+                if job.fps > 0 {
+                    Text("\(Int(job.fps)) FPS").font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
+                }
+                if job.isHardwareAccelerated {
+                    HStack(spacing: 2) {
+                        Image(systemName: "bolt.fill").font(.system(size: 9)).foregroundColor(.yellow)
+                        Text("VideoToolbox").font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                }
+            }
+        } else if job.isEncryptedSource && job.state == .completed {
+            HStack(spacing: 6) {
+                Text("100%").font(.system(size: 11, weight: .bold)).foregroundColor(.cyan)
+                Text("✓ 已秒级解锁 (Lossless FLAC)")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(Color(red: 0.2, green: 0.95, blue: 0.4))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color.green.opacity(0.2)))
+                    .overlay(Capsule().stroke(Color.green.opacity(0.6), lineWidth: 1))
+                    .shadow(color: Color.green.opacity(0.4), radius: 4)
+            }
+        } else if job.state == .completed {
+            HStack(spacing: 6) {
+                Text("100%").font(.system(size: 11, weight: .bold)).foregroundColor(.cyan)
+                Text("✓ 转换完成")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.green)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color.green.opacity(0.18)))
+            }
+        } else if job.isDirectCopy {
+            HStack(spacing: 4) {
+                Image(systemName: "shuffle")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+        } else if job.state == .decrypting {
+            HStack(spacing: 4) {
+                ProgressView().controlSize(.small)
+                Text("解密中...").font(.system(size: 11)).foregroundColor(.purple)
+            }
+        } else if job.state == .analyzing {
+            HStack(spacing: 4) {
+                ProgressView().controlSize(.small)
+                Text("分析中...").font(.system(size: 11)).foregroundColor(.cyan)
+            }
+        } else if job.state == .failed {
+            Text(job.errorMessage ?? "失败").font(.system(size: 10)).foregroundColor(.red).lineLimit(1)
         }
     }
 }

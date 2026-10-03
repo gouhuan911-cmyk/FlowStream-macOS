@@ -110,4 +110,22 @@ final class TranscodeJob: ObservableObject, Identifiable, @unchecked Sendable {
     var formattedProgress: String {
         "\(Int(progress * 100))%"
     }
+
+    var targetSummary: String {
+        if isDirectCopy {
+            return "\(preset.container.rawValue.uppercased()) (极速直通 -c copy)"
+        } else if isEncryptedSource && (preset.id == "audio-flac" || preset.container == .flac) {
+            return "FLAC (无损音频)"
+        } else if preset.id == "mp4-hevc-hw" || preset.id == "mp4-hevc" {
+            return "MP4 (4K HEVC)"
+        } else if preset.id == "mp4-h264-hw" || preset.id == "mp4-h264" {
+            return "MP4 (H.264)"
+        } else if preset.id == "mov-prores" {
+            return "MOV (ProRes 422)"
+        } else if preset.id == "audio-mp3" {
+            return "MP3 (320K)"
+        } else {
+            return preset.name
+        }
+    }
 }

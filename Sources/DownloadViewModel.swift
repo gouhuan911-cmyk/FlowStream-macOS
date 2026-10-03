@@ -19,6 +19,19 @@ public final class DownloadViewModel: ObservableObject {
     // MARK: - 下载队列与历史记录
     @Published public var queueTasks: [DownloadTaskItem] = []
     @Published public var historyItems: [DownloadHistoryItem] = []
+    @Published public var historySearchText: String = ""
+    
+    public var filteredHistoryItems: [DownloadHistoryItem] {
+        let query = historySearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if query.isEmpty {
+            return historyItems
+        }
+        return historyItems.filter {
+            $0.title.lowercased().contains(query) ||
+            $0.filePath.lowercased().contains(query) ||
+            $0.platform.rawValue.lowercased().contains(query)
+        }
+    }
     
     // MARK: - 万能转换舱
     @Published var convertJobs: [TranscodeJob] = []
