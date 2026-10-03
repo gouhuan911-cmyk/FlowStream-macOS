@@ -85,6 +85,8 @@ public final class IQIYINativeParser {
         var thumb = parsedPage.thumbnail ?? ""
         if thumb.hasPrefix("//") {
             thumb = "https:" + thumb
+        } else if thumb.hasPrefix("http://") {
+            thumb = "https://" + thumb.dropFirst("http://".count)
         }
         
         let displayTitle: String
@@ -114,7 +116,7 @@ public final class IQIYINativeParser {
         let rawSign = "\(tm)\(tmtsKey)\(tvid)"
         let sc = Insecure.MD5.hash(data: Data(rawSign.utf8)).map { String(format: "%02x", $0) }.joined()
         
-        let apiString = "http://cache.m.iqiyi.com/jp/tmts/\(tvid)/\(tvid)/?tvid=\(tvid)&vid=\(tvid)&src=\(tmtsSrc)&sc=\(sc)&t=\(tm)"
+        let apiString = "https://cache.m.iqiyi.com/jp/tmts/\(tvid)/\(tvid)/?tvid=\(tvid)&vid=\(tvid)&src=\(tmtsSrc)&sc=\(sc)&t=\(tm)"
         guard let apiURL = URL(string: apiString) else { return [] }
         
         var req = URLRequest(url: apiURL)
