@@ -79,12 +79,18 @@ public final class YTDLPService {
             }
         }
         
-        // 4. 针对抖音 (v.douyin.com / douyin.com) 启用原生 WebKit 纯净无水印提取
+        // 4. 针对抖音 (v.douyin.com / douyin.com / iesdouyin.com) 启用原生 WebKit 纯净原画无水印提取
         if host.contains("douyin.com") || host.contains("iesdouyin.com") {
             do {
                 return try await DouyinNativeParser.shared.parse(url: url)
             } catch {
-                // 抖音原生若遇到异常，自动静默降级回 yt-dlp 双重兜底
+                // 原生解析如遇微弱延迟，自动立即复试一次
+                do {
+                    try await Task.sleep(nanoseconds: 400_000_000)
+                    return try await DouyinNativeParser.shared.parse(url: url)
+                } catch {
+                    throw YTDLPError.executionFailed(message: "抖音视频原画解析超时，请稍后重试或检查链接有效性。")
+                }
             }
         }
         
@@ -329,14 +335,22 @@ public final class YTDLPService {
             
             // 如果具备无水印直链 (如抖音、微信视频号云解析等)，直接下载该原画视频流
             if let directURL = metadata.directStreamURL, !directURL.isEmpty {
-                let isWechat = metadata.url.contains("weixin.qq.com") || metadata.url.contains("channels.weixin")
-                let ua = isWechat ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" : "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X)"
+                let isDouyin = metadata.url.contains("douyin.com") || metadata.url.contains("iesdouyin.com") || directURL.contains("douyinvod.com")
+                let ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.15"
+                
+                var headers: [String] = [
+                    "--add-header", "User-Agent: \(ua)"
+                ]
+                if isDouyin {
+                    headers.append(contentsOf: ["--add-header", "Referer: https://www.douyin.com/"])
+                }
+                
                 arguments.append(contentsOf: [
                     "-o", "\(cleanSafeTitle.prefix(50)).%(ext)s",
-                    "--add-header", "User-Agent: \(ua)",
-                    "--no-check-certificates",
-                    directURL
+                    "--no-check-certificates"
                 ])
+                arguments.append(contentsOf: headers)
+                arguments.append(directURL)
             } else {
                 // 通用下载模式
                 if concurrentFragments > 1 {
