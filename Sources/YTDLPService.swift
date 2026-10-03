@@ -79,7 +79,12 @@ public final class YTDLPService {
             }
         }
         
-        // 4. 针对抖音 (v.douyin.com / douyin.com / iesdouyin.com) 启用原生 WebKit 纯净原画无水印提取
+        // 4. 针对爱奇艺 (iqiyi.com / pps.tv) 启用官方 TMTS 切片分发原生解析引擎
+        if host.contains("iqiyi.com") || host.contains("pps.tv") {
+            return try await IQIYINativeParser.shared.parse(url: url)
+        }
+        
+        // 5. 针对抖音 (v.douyin.com / douyin.com / iesdouyin.com) 启用原生 WebKit 纯净原画无水印提取
         if host.contains("douyin.com") || host.contains("iesdouyin.com") {
             do {
                 return try await DouyinNativeParser.shared.parse(url: url)
@@ -94,13 +99,13 @@ public final class YTDLPService {
             }
         }
         
-        // 5. 针对小红书 (xhslink.cn / xhslink.com / xiaohongshu.com) 进行短链接 0.16s 重定向穿透
+        // 6. 针对小红书 (xhslink.cn / xhslink.com / xiaohongshu.com) 进行短链接 0.16s 重定向穿透
         var targetURLString = cleanURLString
         if host.contains("xhslink") || host.contains("xiaohongshu") {
             targetURLString = await resolveXHSTargetURL(from: cleanURLString)
         }
         
-        // 6. 调用通用 yt-dlp 引擎解析（支持 YouTube、小红书、快手、TikTok 等海量平台）
+        // 7. 调用通用 yt-dlp 引擎解析（支持 YouTube、小红书、快手、TikTok 等海量平台）
         return try await parseViaYTDLP(url: targetURLString, removeWatermark: removeWatermark)
     }
     
@@ -333,22 +338,28 @@ public final class YTDLPService {
                 "-P", destinationFolder.path
             ]
             
-            // 如果具备无水印直链 (如抖音、微信视频号云解析等)，直接下载该原画视频流
+            // 如果具备无水印直链 (如爱奇艺 M3U8、抖音/微信视频号等)，直接下载该原画视频流
             if let directURL = metadata.directStreamURL, !directURL.isEmpty {
                 let isDouyin = metadata.url.contains("douyin.com") || metadata.url.contains("iesdouyin.com") || directURL.contains("douyinvod.com")
-                let ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.15"
+                let isIqiyi = metadata.url.contains("iqiyi.com") || metadata.url.contains("pps.tv") || directURL.contains("iqiyi.com")
+                let ua = isIqiyi ? "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1" : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.15"
                 
                 var headers: [String] = [
                     "--add-header", "User-Agent: \(ua)"
                 ]
                 if isDouyin {
                     headers.append(contentsOf: ["--add-header", "Referer: https://www.douyin.com/"])
+                } else if isIqiyi {
+                    headers.append(contentsOf: ["--add-header", "Referer: https://m.iqiyi.com/"])
                 }
                 
                 arguments.append(contentsOf: [
                     "-o", "\(cleanSafeTitle.prefix(50)).%(ext)s",
                     "--no-check-certificates"
                 ])
+                if quality == .audioMP3 || quality == .audioM4A {
+                    arguments.append(contentsOf: quality.ytdlpArguments(removeWatermark: removeWatermark))
+                }
                 arguments.append(contentsOf: headers)
                 arguments.append(directURL)
             } else {

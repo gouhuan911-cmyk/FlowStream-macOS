@@ -6,7 +6,7 @@ set -e
 # ==============================================================================
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-VERSION="2.1.0"
+VERSION="2.2.0"
 APP_NAME="流光下载"
 APP_BUNDLE="${ROOT}/FlowStreamDL.app"
 VOL_NAME="流光下载 v${VERSION}"

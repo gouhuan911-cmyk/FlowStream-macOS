@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/Swift-5.9%2B-orange?logo=swift" alt="Swift" />
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" />
   <img src="https://img.shields.io/badge/Architecture-Apple%20Silicon%20%7C%20Intel-purple" alt="Arch" />
-  <img src="https://img.shields.io/badge/Release-v2.1.0-emerald" alt="Release" />
+  <img src="https://img.shields.io/badge/Release-v2.2.0-emerald" alt="Release" />
 </p>
 
 ---
@@ -61,6 +61,7 @@
 - **完整保留元数据**：自动提取并写入封面图、歌手、专辑与 ID3 标签。
 
 ### 🌐 强大极致的流媒体下载体验
+- **爱奇艺独家原生分发引擎**：专研 iQIYI TMTS 原生流分发协议与移动端状态树解析，彻底告别 yt-dlp 桌面端抓取器失效（`Can't find any video`）顽疾，毫秒级提取 720P 高清原画免广告 HLS/M3U8 流，支持 30x 倍速疾速下载。
 - **B 站独家 0.15 秒极速直通车**：内置 Bilibili 官方开放直通协议，毫秒级提取 1080P/4K 高清流，免除繁重的外部 JS 解密。
 - **全网主流平台全覆盖**：无缝调度 `yt-dlp` + `FFmpeg` 强劲内核，完美支持 YouTube、Twitter/X、TikTok、快手及通用流媒体网页。
 - **无水印纯净提取**：内置 WebKit 原生穿透引擎，自动解析抖音、小红书真实分享笔记与无水印原片直链。
@@ -89,7 +90,7 @@
 ## 🚀 快速开始 (Getting Started)
 
 ### 方式 1：直接下载发布包 (推荐)
-前往项目的 [Releases](../../releases) 页面，下载最新的 `FlowStreamDL-v2.1.0-macOS.dmg` 或 `FlowStreamDL-v2.1.0-macOS.zip`，拖拽至「应用程序」文件夹即可使用。
+前往项目的 [Releases](../../releases) 页面，下载最新的 `FlowStreamDL-v2.2.0-macOS.dmg` 或 `FlowStreamDL-v2.2.0-macOS.zip`，拖拽至「应用程序」文件夹即可使用。
 
 > **提示**：首次打开如遇系统“无法验证开发者”提示，请在 macOS「系统设置」->「隐私与安全性」中点击「仍要打开」即可。
 

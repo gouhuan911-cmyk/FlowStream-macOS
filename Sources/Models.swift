@@ -9,6 +9,7 @@ public enum VideoPlatform: String, Codable {
     case youtube = "YouTube"
     case kuaishou = "快手"
     case tiktok = "TikTok"
+    case iqiyi = "爱奇艺"
     case wechat = "微信视频号"
     case convert = "万能转换"
     case other = "通用网络"
@@ -22,6 +23,7 @@ public enum VideoPlatform: String, Codable {
         if lower.contains("youtube.com") || lower.contains("youtu.be") { return .youtube }
         if lower.contains("kuaishou.com") { return .kuaishou }
         if lower.contains("tiktok.com") { return .tiktok }
+        if lower.contains("iqiyi.com") || lower.contains("pps.tv") { return .iqiyi }
         return .other
     }
     
@@ -34,6 +36,7 @@ public enum VideoPlatform: String, Codable {
         case .youtube: return "play.rectangle.fill"
         case .kuaishou: return "video.fill"
         case .tiktok: return "sparkles.tv"
+        case .iqiyi: return "play.tv.fill"
         case .convert: return "arrow.triangle.2.circlepath.circle.fill"
         case .other: return "globe"
         }
@@ -48,6 +51,7 @@ public enum VideoPlatform: String, Codable {
         case .youtube: return Color(red: 0.95, green: 0.2, blue: 0.2) // 经典红
         case .kuaishou: return Color(red: 1.0, green: 0.5, blue: 0.1) // 橙色
         case .tiktok: return Color(red: 0.2, green: 0.9, blue: 0.8)
+        case .iqiyi: return Color(red: 0.0, green: 0.85, blue: 0.35) // 爱奇艺标志性荧光绿
         case .convert: return Color(red: 0.0, green: 0.82, blue: 0.92) // 流光亮青
         case .other: return Color.gray
         }
