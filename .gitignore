@@ -1,0 +1,24 @@
+# macOS 系统与元数据文件
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# 编译生成文件与二进制产物
+FlowStreamDL
+*.app/
+*.zip
+*.dmg
+*.o
+*.dSYM/
+build/
+.build/
+DerivedData/
+
+# Xcode / Swift 缓存
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+.swiftpm/
